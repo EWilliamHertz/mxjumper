@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useGame } from '../contexts/GameContext';
 
 // Map definitions
@@ -347,29 +347,17 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
     };
   }, [showChat, chatInput, sendChatMessage, setGameState, healParty, updatePosition, playerState, currentMap, npcDialog]);
 
-  // Check map exits (Now requires 'e' key)
   const checkExits = useCallback((x, y, keys) => {
-    const playerWidth = 40;
-    const playerHeight = 56;
-    
+    const playerWidth = 40; const playerHeight = 56;
     for (const exit of mapData.exits) {
-      // Check if overlapping
-      if (
-        x + playerWidth > exit.x &&
-        x < exit.x + exit.width &&
-        y + playerHeight > exit.y &&
-        y < exit.y + exit.height
-      ) {
-        // If overlapping, require 'e' to interact
+      if (x + playerWidth > exit.x && x < exit.x + exit.width &&
+          y + playerHeight > exit.y && y < exit.y + exit.height) {
+        // NEW: Only trigger if STANDING on the exit AND pressing 'E'
         if (keys['e']) {
           const newMap = MAPS[exit.to];
           updatePosition(newMap.spawnX, newMap.spawnY, exit.to);
           setCurrentMap(exit.to);
-          setPlayerState(prev => ({
-            ...prev,
-            x: exit.x < 100 ? 900 : newMap.spawnX,
-            y: newMap.spawnY,
-          }));
+          setPlayerState(prev => ({ ...prev, x: exit.x < 100 ? 900 : newMap.spawnX, y: newMap.spawnY }));
           return true;
         }
       }
