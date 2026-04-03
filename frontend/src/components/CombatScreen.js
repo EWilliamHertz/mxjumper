@@ -277,7 +277,7 @@ export const CombatScreen = () => {
     } else if (aliveEnemies.length === 0 && !showVictory) {
       handleVictory();
     }
-  }, [partyState, enemyState, battleStarted, showVictory]);
+  }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
 
   const handleVictory = async () => {
     setShowVictory(true);
