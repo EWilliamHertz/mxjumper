@@ -1,25 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root {
-  --bg-dark: #050505;
-  --surface: #12121c;
-  --panel: rgba(20, 20, 40, 0.9);
-  --panel-border: #ffffff;
-  --primary: #FF3B30;
-  --secondary: #00E5FF;
-  --accent: #FFD700;
-  --text-main: #ffffff;
-  --text-muted: #8b8b99;
-  --hp-bar: #FF3366;
-  --mp-bar: #33CCFF;
-  --exp-bar: #FFD700;
-  --ctb-active: #00FF66;
-  --ctb-enemy: #FF3366;
-}
 
 * {
   box-sizing: border-box;
@@ -28,295 +11,106 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'VT323', monospace;
-  background-color: var(--bg-dark);
-  color: var(--text-main);
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
-  image-rendering: pixelated;
-}
-
-.font-pixel {
-  font-family: 'Press Start 2P', monospace;
-}
-
-.font-body {
-  font-family: 'VT323', monospace;
-}
-
-/* Game Panel Styles */
-.game-panel {
-  background: var(--panel);
-  border: 2px solid var(--panel-border);
-  box-shadow: 4px 4px 0px rgba(0, 0, 0, 1);
-}
-
-.game-panel-inner {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  margin: 2px;
-  padding: 8px;
-}
-
-/* Progress Bars */
-.hp-bar {
-  background: linear-gradient(90deg, var(--hp-bar), #ff6699);
-  height: 100%;
-  transition: width 0.3s ease;
-}
-
-.mp-bar {
-  background: linear-gradient(90deg, var(--mp-bar), #66d9ff);
-  height: 100%;
-  transition: width 0.3s ease;
-}
-
-.exp-bar {
-  background: linear-gradient(90deg, var(--exp-bar), #ffeb3b);
-  height: 100%;
-  transition: width 0.3s ease;
-}
-
-.bar-container {
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  height: 16px;
-  position: relative;
-}
-
-.bar-label {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  text-shadow: 1px 1px 0 #000;
-  z-index: 1;
-}
-
-/* Menu Items */
-.menu-item {
-  padding: 8px 16px;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.1s ease;
-}
-
-.menu-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateX(4px);
-}
-
-.menu-item:hover::before {
-  content: '▶';
-  position: absolute;
-  left: 4px;
-}
-
-.menu-item.selected {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.menu-item.selected::before {
-  content: '▶';
-  position: absolute;
-  left: 4px;
-  animation: blink 0.5s infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-/* CTB Timeline */
-.ctb-turn {
-  width: 40px;
-  height: 40px;
-  border: 2px solid var(--panel-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  background: var(--surface);
-  position: relative;
-}
-
-.ctb-turn.active {
-  border-color: var(--ctb-active);
-  box-shadow: 0 0 8px var(--ctb-active);
-}
-
-.ctb-turn.enemy {
-  border-color: var(--ctb-enemy);
-}
-
-.ctb-turn.ally {
-  border-color: var(--secondary);
-}
-
-/* Damage Numbers */
-.damage-text {
-  position: absolute;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 16px;
-  animation: damage-float 1s ease-out forwards;
-  pointer-events: none;
-  text-shadow: 2px 2px 0 #000;
-}
-
-.damage-text.critical {
-  font-size: 24px;
-  color: var(--accent);
-}
-
-.damage-text.heal {
-  color: var(--ctb-active);
-}
-
-@keyframes damage-float {
-  0% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-40px);
-  }
-}
-
-/* Sprite Animations */
-.sprite {
-  image-rendering: pixelated;
-  transition: transform 0.1s ease;
-}
-
-.sprite.attack {
-  animation: attack-motion 0.3s ease;
-}
-
-@keyframes attack-motion {
-  0% { transform: translateX(0); }
-  50% { transform: translateX(-20px); }
-  100% { transform: translateX(0); }
-}
-
-.sprite.hurt {
-  animation: hurt-flash 0.2s ease;
-}
-
-@keyframes hurt-flash {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(2) saturate(0); }
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Canvas Styles */
 #game-canvas {
   display: block;
-  image-rendering: pixelated;
-  background: #1a1a2e;
-}
-
-/* Input Styles */
-.game-input {
-  background: var(--surface);
-  border: 2px solid var(--panel-border);
-  color: var(--text-main);
-  padding: 8px 12px;
-  font-family: 'VT323', monospace;
-  font-size: 18px;
-  outline: none;
-}
-
-.game-input:focus {
-  border-color: var(--secondary);
-  box-shadow: 0 0 8px var(--secondary);
-}
-
-.game-button {
-  background: transparent;
-  border: 2px solid var(--panel-border);
-  color: var(--text-main);
-  padding: 8px 16px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.1s ease;
-}
-
-.game-button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-}
-
-.game-button:active {
-  transform: translateY(0);
-}
-
-.game-button.primary {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.game-button.secondary {
-  border-color: var(--secondary);
-  color: var(--secondary);
+  image-rendering: auto;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface);
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
-  border: 1px solid var(--panel-border);
+  background: rgba(100, 116, 139, 0.8);
+  border-radius: 4px;
 }
 
-/* Tooltip */
-.game-tooltip {
-  background: var(--panel);
-  border: 2px solid var(--panel-border);
-  padding: 8px;
-  font-size: 14px;
-  max-width: 200px;
-  z-index: 100;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.8);
 }
 
-/* Level Up Animation */
-.level-up {
-  animation: level-up-glow 1s ease infinite;
+/* Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
-@keyframes level-up-glow {
-  0%, 100% { box-shadow: 0 0 10px var(--accent); }
-  50% { box-shadow: 0 0 30px var(--accent); }
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(251, 191, 36, 0.5); }
+  50% { box-shadow: 0 0 30px rgba(251, 191, 36, 0.8); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Button hover effects */
+button {
+  transition: all 0.2s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Input focus styles */
+input:focus {
+  outline: none;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
 @layer base {
   :root {
-    --background: 0 0% 2%;
-    --foreground: 0 0% 100%;
-    --card: 240 20% 7%;
-    --card-foreground: 0 0% 100%;
-    --popover: 240 20% 7%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 4 90% 58%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 45 93% 47%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 187 100% 50%;
-    --secondary-foreground: 0 0% 0%;
-    --muted: 240 10% 15%;
-    --muted-foreground: 240 5% 55%;
-    --accent: 45 100% 50%;
-    --accent-foreground: 0 0% 0%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 100%;
-    --input: 240 10% 15%;
-    --ring: 187 100% 50%;
-    --radius: 0px;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 45 93% 47%;
+    --radius: 0.75rem;
   }
 }
 
