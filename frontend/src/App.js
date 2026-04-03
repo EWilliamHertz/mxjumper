@@ -79,8 +79,10 @@ const PublicRoute = ({ children }) => {
 
 function App() {
   return (
-    <div className="App">
-      <AuthProvider>
+    <div className="App h-[100dvh] w-screen overflow-hidden bg-[#050505]">
+      {/* Scale wrapper to ensure HUD/Chat fits on iPad without scrolling */}
+      <div className="h-full w-full flex flex-col transform scale-[0.95] origin-top">
+        <AuthProvider>
         <BrowserRouter>
           <Routes>
             <Route 

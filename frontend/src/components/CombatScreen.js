@@ -178,7 +178,10 @@ const MonsterSprite = ({ type, size = 64 }) => {
       </svg>
     )
   };
-  return sprites[type] || sprites.slime;
+};
+  // Normalize the type to lowercase to match the keys in the 'sprites' object
+  const normalizedType = (type || 'slime').toLowerCase();
+  return sprites[normalizedType] || sprites.slime;
 };
 
 const PlayerSprite = ({ size = 64 }) => (
@@ -497,8 +500,10 @@ export const CombatScreen = () => {
 
   if (!combatData) return null;
 
-  return (
-    <div className="w-full h-screen flex bg-gradient-to-b from-indigo-950 via-purple-950 to-slate-950" data-testid="combat-screen">
+ return (
+    <div className="w-full h-[100dvh] flex bg-slate-950 overflow-hidden" data-testid="combat-screen">
+      {/* Visual Background Layer */}
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-900/20 to-slate-950 pointer-events-none" />
       {/* Turn Order - Left Panel */}
       <div className="w-20 bg-slate-900/90 border-r-2 border-slate-700 p-1 flex flex-col" data-testid="ctb-timeline">
         <div className="text-amber-400 text-[10px] font-bold mb-1 text-center">TURNS</div>
@@ -540,6 +545,8 @@ export const CombatScreen = () => {
 
         {/* Battle Field */}
         <div className="flex-1 flex items-center justify-around px-6 relative">
+          {/* Ground/Floor for perspective */}
+          <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 w-4/5 h-20 bg-slate-800/20 rounded-[100%] blur-xl pointer-events-none" />
           {/* Enemies */}
           <div className="flex flex-col gap-4">
             {enemyState.filter(e => e.current_hp > 0).map((enemy, idx) => (
