@@ -1,4 +1,4 @@
-# Pixel Quest - 2D Platformer RPG
+# MXJumper - 2D Platformer RPG
 
 ## Original Problem Statement
 Build a 2D side-scrolling platformer hub (MapleStory style) with basic physics. Implement a Multi-Ally Combat System (Final Fantasy X style) with a dynamic CTB turn timeline, supporting 1 to 4 party members (player + captured allies). Implement a capture mechanic to add enemies to the party. Create a Diablo-style Progression System (stat allocation for Strength/Agility/Intelligence/Vitality and a modular ability tree). Use NeonDB for all persistence. Implement WebSocket networking for a multiplayer environment where players can see each other.

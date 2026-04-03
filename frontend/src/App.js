@@ -16,7 +16,7 @@ const LoadingScreen = () => (
     style={{ background: '#050505' }}
   >
     <div className="text-center">
-      <h1 className="font-pixel text-2xl text-[#FFD700] mb-4">PIXEL QUEST</h1>
+      <h1 className="font-pixel text-2xl text-[#FFD700] mb-4">MXJumper</h1>
       <div className="font-body text-[#8b8b99] animate-pulse">Loading...</div>
     </div>
   </div>

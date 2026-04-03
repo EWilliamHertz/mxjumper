@@ -41,7 +41,7 @@ export const CharacterCreation = () => {
           {/* Header */}
           <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-4 text-center">
             <h1 className="text-2xl font-black text-white">🦸 CREATE YOUR HERO</h1>
-            <p className="text-amber-100/80 text-sm mt-1">Enter the world of Pixel Quest</p>
+            <p className="text-amber-100/80 text-sm mt-1">Enter the world of MXJumper</p>
           </div>
 
           <div className="p-6">

@@ -65,7 +65,7 @@ export const LoginScreen = () => {
         {/* Title */}
         <div className="text-center mb-8">
           <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 mb-2" data-testid="game-title">
-            PIXEL QUEST
+            MXJumper
           </h1>
           <p className="text-slate-400 text-lg">Adventure Awaits!</p>
         </div>

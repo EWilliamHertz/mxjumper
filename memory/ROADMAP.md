@@ -1,7 +1,7 @@
-# Pixel Quest - 6-Month MMORPG Development Roadmap
+# MXJumper - 6-Month MMORPG Development Roadmap
 
 ## Vision
-Transform Pixel Quest from a single-map platformer RPG into a fully-featured 2D MMORPG with persistent multiplayer worlds, deep progression systems, guild warfare, and a player-driven economy.
+Transform MXJumper from a single-map platformer RPG into a fully-featured 2D MMORPG with persistent multiplayer worlds, deep progression systems, guild warfare, and a player-driven economy.
 
 ---
 
