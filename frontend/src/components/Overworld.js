@@ -171,6 +171,7 @@ export const Overworld = () => {
   const [showInventory, setShowInventory] = useState(false);
 const [showSkillTree, setShowSkillTree] = useState(false); // NEW
   const [showGuildMenu, setShowGuildMenu] = useState(false); // NEW
+  const [duelSetup, setDuelSetup] = useState(null); // NEW: Tracks who you are challenging and the wager
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
 
@@ -710,7 +711,35 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
            <button onClick={() => setShowSkillTree(false)} className="mt-4 bg-slate-800 text-white font-bold py-3 rounded-lg hover:bg-slate-700 border border-slate-600 uppercase tracking-widest">Close Tree (K)</button>
         </div>
       )}
+{/* NEW: Duel Wager Setup Modal */}
+      {duelSetup && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-950 border-4 border-red-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(239,68,68,0.3)] flex flex-col">
+           <h2 className="text-xl text-red-400 font-black uppercase tracking-widest text-center mb-2">Challenge {duelSetup.target.name}</h2>
+           <p className="text-slate-400 text-xs text-center mb-4">Set a gold wager. The winner takes it all.</p>
+           
+           <div className="bg-slate-900 p-4 rounded-lg border border-slate-700 mb-4 flex justify-between items-center">
+             <span className="text-white font-bold text-sm">Wager:</span>
+             <div className="flex items-center gap-2">
+               <button onClick={() => setDuelSetup(p => ({...p, wager: Math.max(0, p.wager - 100)}))} className="bg-slate-700 hover:bg-slate-600 px-2 rounded text-white">-</button>
+               <span className="text-amber-400 font-bold w-12 text-center">{duelSetup.wager}G</span>
+               <button onClick={() => setDuelSetup(p => ({...p, wager: Math.min(player?.gold || 0, p.wager + 100)}))} className="bg-slate-700 hover:bg-slate-600 px-2 rounded text-white">+</button>
+             </div>
+           </div>
 
+           <div className="flex gap-2">
+             <button 
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest"
+                onClick={() => { 
+                  // In GameContext.js, you'll need to update sendMultiplayerRequest to accept a payload
+                  sendMultiplayerRequest('duel_request', duelSetup.target.id, { wager: duelSetup.wager }); 
+                  setDuelSetup(null); 
+                }}>
+                Send Challenge
+             </button>
+             <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded uppercase text-xs" onClick={() => setDuelSetup(null)}>Cancel</button>
+           </div>
+        </div>
+      )}
       {/* NEW: Guilds Menu (Upgraded) */}
       {showGuildMenu && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[450px] bg-slate-950 border-4 border-indigo-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(99,102,241,0.3)] flex flex-col">
@@ -787,17 +816,18 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
         ${gameTime >= 450 ? 'bg-blue-950/40' : ''}`} 
       />
 
-      {/* NEW: Quest Tracker HUD */}
-      <div className="absolute top-4 right-4 w-64 bg-black/50 border border-slate-700/50 rounded-lg p-3 z-10 backdrop-blur-sm pointer-events-none">
-        <h3 className="text-amber-400 font-bold text-xs uppercase mb-2 border-b border-slate-700 pb-1">Active Quests</h3>
-        {quests?.active?.length > 0 ? quests.active.map(q => (
-          <div key={q.id} className="text-white text-[10px] mb-1">
-            • {q.name || q.title} <span className="text-slate-400">({q.progress}/{q.required_count})</span>
-          </div>
-        )) : (
-          <div className="text-slate-500 text-[10px] italic">No active quests.</div>
-        )}
-      </div>
+      {/* NEW: Quest Tracker HUD (Only visible if you have active quests) */}
+      {quests?.active?.length > 0 && (
+        <div className="absolute top-4 right-4 w-64 bg-black/50 border border-slate-700/50 rounded-lg p-3 z-10 backdrop-blur-sm pointer-events-none shadow-lg">
+          <h3 className="text-amber-400 font-bold text-[10px] tracking-widest uppercase mb-2 border-b border-slate-700 pb-1">Active Quests</h3>
+          {quests.active.map(q => (
+            <div key={q.id} className="text-white text-[10px] mb-1 flex justify-between">
+              <span>• {q.name || q.title}</span>
+              <span className="text-amber-400">({q.progress}/{q.required_count})</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* NEW: Diablo-style Inventory Modal */}
       {showInventory && (
@@ -887,8 +917,11 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
               👋 Add Friend
             </button>
             <button className="w-full bg-red-600 hover:bg-red-500 text-white py-1.5 rounded text-sm"
-              onClick={() => { sendMultiplayerRequest('duel_request', selectedEntity.id); setShowEntityMenu(false); }}>
-              ⚔️ Duel
+              onClick={() => { 
+                setDuelSetup({ target: selectedEntity, wager: 100 }); 
+                setShowEntityMenu(false); 
+              }}>
+              ⚔️ Duel (Wager)
             </button>
             <button className="w-full bg-green-600 hover:bg-green-500 text-white py-1.5 rounded text-sm"
               onClick={() => { sendMultiplayerRequest('trade_request', selectedEntity.id); setShowEntityMenu(false); }}>

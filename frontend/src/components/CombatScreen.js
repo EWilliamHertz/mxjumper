@@ -217,18 +217,65 @@ export const CombatScreen = () => {
   const [captureName, setCaptureName] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 const [battleStarted, setBattleStarted] = useState(false);
-  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
-  const [isShaking, setIsShaking] = useState(false); // NEW
-  
-  const processedTurnsRef = useRef(new Set());
-  const enemyTimerRef = useRef(null);
-  const turnIndexRef = useRef(0);
+  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
+  const [isShaking, setIsShaking] = useState(false);
+  
+  const processedTurnsRef = useRef(new Set());
+  const enemyTimerRef = useRef(null);
+  const turnIndexRef = useRef(0);
+  const processingRef = useRef(false); // NEW: Lock to prevent spam-click hangs
 
-  // Keep ref in sync with state
-  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
 
-  // Get current actor
-  const currentActor = useMemo(() => {
+
+
+  // Keep ref in sync with state
+  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
+
+
+
+
+  // 1. Logic Definitions FIRST (Fixes "Cannot access before initialization" crash)
+  const currentActor = useMemo(() => {
+    if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
+    return turnTimeline[turnIndex];
+  }, [turnTimeline, turnIndex]);
+
+
+
+
+  const isPlayerTurn = useMemo(() => {
+    return currentActor && !currentActor.isEnemy && !isProcessing;
+  }, [currentActor, isProcessing]);
+
+
+
+
+  const advanceTurn = useCallback(() => {
+    const nextIndex = turnIndexRef.current + 1;
+    if (nextIndex >= turnTimeline.length - 2) {
+      processedTurnsRef.current = new Set();
+      setTimelineOffset(prev => prev + 100);
+      setTurnIndex(0);
+    } else {
+      setTurnIndex(nextIndex);
+    }
+    setIsProcessing(false);
+    processingRef.current = false; // Release the lock
+    setSelectedMenu('main');
+    setSelectedAction(null);
+  }, [turnTimeline.length]);
+
+
+
+
+  const handleVictory = useCallback(async () => {
+    if (showVictory) return;
+    setShowVictory(true);
+    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
+    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
+    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
+    setVictoryData({ ...result, totalXP });
+  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
     if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
     return turnTimeline[turnIndex];
   }, [turnTimeline, turnIndex]);
@@ -237,25 +284,7 @@ const [battleStarted, setBattleStarted] = useState(false);
     return currentActor && !currentActor.isEnemy && !isProcessing;
   }, [currentActor, isProcessing]);
 
-  const advanceTurn = useCallback(() => {
-    const current = turnIndexRef.current;
-    const nextIndex = current + 1;
-    
-    // If we're running low on timeline, regenerate
-    if (nextIndex >= turnTimeline.length - 2) {
-      processedTurnsRef.current = new Set();
-      setTimelineOffset(prev => prev + 100);
-      setTurnIndex(0);
-      turnIndexRef.current = 0;
-    } else {
-      setTurnIndex(nextIndex);
-      turnIndexRef.current = nextIndex;
-    }
-    
-    setIsProcessing(false);
-    setSelectedMenu('main');
-    setSelectedAction(null);
-  }, [turnTimeline.length]);
+  
 
   // Initialize combat
   useEffect(() => {
@@ -303,17 +332,7 @@ const [battleStarted, setBattleStarted] = useState(false);
     }
   }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn]);
 
-  const handleVictory = useCallback(async () => {
-    if (showVictory) return;
-    setShowVictory(true);
-    
-    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
-    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
-    
-    // Pass the list of IDs for the backend to record in the bestiary
-    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
-    setVictoryData({ ...result, totalXP });
-  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
+  
 
   // Check win/lose
   useEffect(() => {
@@ -351,9 +370,10 @@ const [battleStarted, setBattleStarted] = useState(false);
   }, []);
 
   // Handle player action
-  const handleAction = async (action, target) => {
-    if (isProcessing || !isPlayerTurn) return;
-    setIsProcessing(true);
+  const handleAction = async (action, target) => {
+    if (isProcessing || !isPlayerTurn || processingRef.current) return;
+    setIsProcessing(true);
+    processingRef.current = true; // Lock inputs
 
     const actor = currentActor;
     
