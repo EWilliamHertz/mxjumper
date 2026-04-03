@@ -16,11 +16,9 @@ from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 import asyncpg
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Database connection pool
 db_pool: Optional[asyncpg.Pool] = None
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -47,7 +45,7 @@ async def init_db():
             )
         ''')
         
-        # Players table (game character data)
+        # Players table with current_map
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS players (
                 id SERIAL PRIMARY KEY,
@@ -66,14 +64,23 @@ async def init_db():
                 vitality INTEGER DEFAULT 10,
                 stat_points INTEGER DEFAULT 0,
                 position_x FLOAT DEFAULT 100,
-                position_y FLOAT DEFAULT 300,
+                position_y FLOAT DEFAULT 400,
+                current_map VARCHAR(50) DEFAULT 'forest',
+                gold INTEGER DEFAULT 100,
                 sprite VARCHAR(100) DEFAULT 'player',
                 created_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(user_id)
             )
         ''')
         
-        # Monsters table (definitions)
+        # Add current_map column if it doesn't exist
+        try:
+            await conn.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS current_map VARCHAR(50) DEFAULT \'forest\'')
+            await conn.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 100')
+        except:
+            pass
+        
+        # Monsters table
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS monsters (
                 id SERIAL PRIMARY KEY,
@@ -87,11 +94,18 @@ async def init_db():
                 sprite VARCHAR(100) NOT NULL,
                 capture_rate FLOAT DEFAULT 0.3,
                 xp_reward INTEGER DEFAULT 25,
+                zone VARCHAR(50) DEFAULT 'forest',
                 description TEXT
             )
         ''')
         
-        # Captured allies (player's monster collection)
+        # Add zone column
+        try:
+            await conn.execute('ALTER TABLE monsters ADD COLUMN IF NOT EXISTS zone VARCHAR(50) DEFAULT \'forest\'')
+        except:
+            pass
+        
+        # Captured allies
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS captured_allies (
                 id SERIAL PRIMARY KEY,
@@ -131,7 +145,7 @@ async def init_db():
             )
         ''')
         
-        # Player/Ally abilities (unlocked abilities)
+        # Entity abilities
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS entity_abilities (
                 id SERIAL PRIMARY KEY,
@@ -144,7 +158,97 @@ async def init_db():
             )
         ''')
         
-        # Login attempts for brute force protection
+        # Friends table
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS friends (
+                id SERIAL PRIMARY KEY,
+                player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                friend_player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(player_id, friend_player_id)
+            )
+        ''')
+        
+        # Chat messages table
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id SERIAL PRIMARY KEY,
+                player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                message TEXT NOT NULL,
+                channel VARCHAR(50) DEFAULT 'global',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+        
+        # Trade requests
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS trade_requests (
+                id SERIAL PRIMARY KEY,
+                from_player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                to_player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                status VARCHAR(20) DEFAULT 'pending',
+                offer_gold INTEGER DEFAULT 0,
+                offer_ally_id INTEGER REFERENCES captured_allies(id),
+                request_gold INTEGER DEFAULT 0,
+                request_ally_id INTEGER REFERENCES captured_allies(id),
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+        
+        # Duel requests
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS duel_requests (
+                id SERIAL PRIMARY KEY,
+                challenger_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                opponent_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                status VARCHAR(20) DEFAULT 'pending',
+                winner_id INTEGER REFERENCES players(id),
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+        
+        # NPCs table
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS npcs (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                npc_type VARCHAR(50) NOT NULL,
+                zone VARCHAR(50) NOT NULL,
+                position_x FLOAT NOT NULL,
+                position_y FLOAT NOT NULL,
+                dialogue TEXT,
+                shop_items JSONB
+            )
+        ''')
+        
+        # Quests table
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS quests (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                npc_id INTEGER REFERENCES npcs(id),
+                required_monster_id INTEGER REFERENCES monsters(id),
+                required_count INTEGER DEFAULT 1,
+                reward_gold INTEGER DEFAULT 50,
+                reward_xp INTEGER DEFAULT 100
+            )
+        ''')
+        
+        # Player quests
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS player_quests (
+                id SERIAL PRIMARY KEY,
+                player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                quest_id INTEGER REFERENCES quests(id),
+                progress INTEGER DEFAULT 0,
+                completed BOOLEAN DEFAULT FALSE,
+                accepted_at TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+        
+        # Login attempts
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS login_attempts (
                 id SERIAL PRIMARY KEY,
@@ -157,28 +261,31 @@ async def init_db():
         logger.info("Database tables created successfully")
 
 async def seed_data():
-    """Seed initial monsters and abilities"""
     async with db_pool.acquire() as conn:
-        # Check if monsters already seeded
-        count = await conn.fetchval('SELECT COUNT(*) FROM monsters')
-        if count == 0:
-            monsters = [
-                ('Slime', 40, 10, 6, 5, 3, 8, 'slime', 0.5, 20, 'A bouncy green slime. Easy to capture.'),
-                ('Goblin', 60, 15, 10, 12, 5, 7, 'goblin', 0.35, 35, 'A mischievous goblin warrior.'),
-                ('Wolf', 70, 10, 12, 15, 4, 9, 'wolf', 0.3, 40, 'A fierce gray wolf.'),
-                ('Bat', 35, 20, 5, 18, 8, 4, 'bat', 0.4, 25, 'A swift cave bat.'),
-                ('Skeleton', 55, 25, 11, 10, 10, 6, 'skeleton', 0.25, 45, 'An undead skeleton warrior.'),
-                ('Mushroom', 50, 30, 7, 6, 12, 10, 'mushroom', 0.45, 30, 'A magical forest mushroom.'),
-                ('Ghost', 45, 40, 6, 14, 15, 5, 'ghost', 0.2, 55, 'A spooky ethereal ghost.'),
-                ('Golem', 120, 5, 18, 3, 2, 20, 'golem', 0.15, 70, 'A powerful stone golem.')
-            ]
-            await conn.executemany('''
-                INSERT INTO monsters (name, base_hp, base_mp, base_strength, base_agility, base_intelligence, base_vitality, sprite, capture_rate, xp_reward, description)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            ''', monsters)
-            logger.info("Seeded 8 monsters")
+        # Seed monsters with zones - use upsert to handle existing data
+        monsters = [
+            ('Slime', 40, 10, 6, 5, 3, 8, 'slime', 0.5, 20, 'forest', 'A bouncy green slime.'),
+            ('Mushroom', 50, 30, 7, 6, 12, 10, 'mushroom', 0.45, 30, 'forest', 'A magical forest mushroom.'),
+            ('Wolf', 70, 10, 12, 15, 4, 9, 'wolf', 0.3, 40, 'forest', 'A fierce gray wolf.'),
+            ('Bat', 35, 20, 5, 18, 8, 4, 'bat', 0.4, 25, 'cave', 'A swift cave bat.'),
+            ('Skeleton', 55, 25, 11, 10, 10, 6, 'skeleton', 0.25, 45, 'cave', 'An undead skeleton warrior.'),
+            ('Spider', 45, 15, 9, 16, 6, 5, 'spider', 0.35, 35, 'cave', 'A giant cave spider.'),
+            ('Goblin', 60, 15, 10, 12, 5, 7, 'goblin', 0.35, 35, 'mountain', 'A mischievous goblin.'),
+            ('Golem', 120, 5, 18, 3, 2, 20, 'golem', 0.15, 70, 'mountain', 'A powerful stone golem.'),
+            ('Harpy', 50, 35, 8, 20, 12, 6, 'harpy', 0.25, 50, 'mountain', 'A winged harpy.'),
+            ('Ghost', 45, 40, 6, 14, 15, 5, 'ghost', 0.2, 55, 'cave', 'A spooky ethereal ghost.'),
+            ('Dragon', 200, 100, 25, 12, 20, 25, 'dragon', 0.05, 200, 'mountain', 'A fearsome dragon.'),
+            ('Phoenix', 150, 80, 20, 22, 25, 15, 'phoenix', 0.08, 180, 'mountain', 'A majestic fire bird.'),
+        ]
+        for m in monsters:
+            await conn.execute('''
+                INSERT INTO monsters (name, base_hp, base_mp, base_strength, base_agility, base_intelligence, base_vitality, sprite, capture_rate, xp_reward, zone, description)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ON CONFLICT (name) DO UPDATE SET zone = $11
+            ''', *m)
+        logger.info(f"Seeded/updated {len(monsters)} monsters")
         
-        # Check if abilities already seeded
+        # Seed abilities
         count = await conn.fetchval('SELECT COUNT(*) FROM abilities')
         if count == 0:
             abilities = [
@@ -199,7 +306,51 @@ async def seed_data():
             ''', abilities)
             logger.info("Seeded 10 abilities")
         
-        # Seed admin user
+        # Seed NPCs
+        count = await conn.fetchval('SELECT COUNT(*) FROM npcs')
+        if count == 0:
+            npcs = [
+                ('Elder Oak', 'quest_giver', 'village', 250, 460, 'Welcome, adventurer! I have tasks for brave souls.', None),
+                ('Merchant Mari', 'shop', 'village', 550, 460, 'Looking to buy or sell? I have the finest wares!', 
+                 json.dumps([
+                     {"name": "Health Potion", "price": 50, "effect": "heal", "value": 50},
+                     {"name": "Mana Potion", "price": 40, "effect": "mp", "value": 30},
+                     {"name": "Capture Orb", "price": 100, "effect": "capture_boost", "value": 0.1}
+                 ])),
+                ('Blacksmith Bron', 'shop', 'village', 800, 460, 'Need equipment? I forge the best!',
+                 json.dumps([
+                     {"name": "Iron Sword", "price": 200, "effect": "strength", "value": 5},
+                     {"name": "Steel Armor", "price": 300, "effect": "vitality", "value": 5}
+                 ])),
+                ('Healer Luna', 'healer', 'village', 400, 460, 'Rest here and restore your strength.', None),
+            ]
+            await conn.executemany('''
+                INSERT INTO npcs (name, npc_type, zone, position_x, position_y, dialogue, shop_items)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ''', npcs)
+            logger.info("Seeded 4 NPCs")
+        
+        # Seed quests
+        count = await conn.fetchval('SELECT COUNT(*) FROM quests')
+        if count == 0:
+            elder_id = await conn.fetchval("SELECT id FROM npcs WHERE name = 'Elder Oak'")
+            slime_id = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Slime'")
+            wolf_id = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Wolf'")
+            skeleton_id = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Skeleton'")
+            
+            if elder_id and slime_id:
+                quests = [
+                    ('Slime Cleanup', 'Defeat 3 slimes in the forest.', elder_id, slime_id, 3, 100, 150),
+                    ('Wolf Hunt', 'Hunt down 2 wolves.', elder_id, wolf_id, 2, 150, 200),
+                    ('Skeleton Purge', 'Clear 5 skeletons from the cave.', elder_id, skeleton_id, 5, 250, 350),
+                ]
+                await conn.executemany('''
+                    INSERT INTO quests (name, description, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ''', quests)
+                logger.info("Seeded 3 quests")
+        
+        # Seed admin
         admin_email = os.environ.get('ADMIN_EMAIL', 'admin@game.com')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
         existing = await conn.fetchrow('SELECT id FROM users WHERE email = $1', admin_email)
@@ -208,7 +359,7 @@ async def seed_data():
             await conn.execute('''
                 INSERT INTO users (email, password_hash, username, role) VALUES ($1, $2, $3, $4)
             ''', admin_email, hashed, 'Admin', 'admin')
-            logger.info(f"Seeded admin user: {admin_email}")
+            logger.info(f"Seeded admin user")
 
 async def close_db():
     global db_pool
@@ -219,27 +370,17 @@ async def close_db():
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_data()
-    # Write test credentials
     os.makedirs('/app/memory', exist_ok=True)
     with open('/app/memory/test_credentials.md', 'w') as f:
         f.write(f"# Test Credentials\n\n")
-        f.write(f"## Admin Account\n")
-        f.write(f"- Email: {os.environ.get('ADMIN_EMAIL', 'admin@game.com')}\n")
-        f.write(f"- Password: {os.environ.get('ADMIN_PASSWORD', 'admin123')}\n")
-        f.write(f"- Role: admin\n\n")
-        f.write(f"## Auth Endpoints\n")
-        f.write(f"- POST /api/auth/register\n")
-        f.write(f"- POST /api/auth/login\n")
-        f.write(f"- POST /api/auth/logout\n")
-        f.write(f"- GET /api/auth/me\n")
+        f.write(f"## Admin: admin@game.com / admin123\n")
+        f.write(f"## Test: test@game.com / test123\n")
     yield
     await close_db()
 
-# Create app
 app = FastAPI(lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -259,34 +400,8 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    username: str
-    role: str
-
 class PlayerCreate(BaseModel):
     name: str
-
-class PlayerResponse(BaseModel):
-    id: int
-    user_id: int
-    name: str
-    level: int
-    xp: int
-    xp_to_next: int
-    hp: int
-    max_hp: int
-    mp: int
-    max_mp: int
-    strength: int
-    agility: int
-    intelligence: int
-    vitality: int
-    stat_points: int
-    position_x: float
-    position_y: float
-    sprite: str
 
 class StatAllocation(BaseModel):
     strength: int = 0
@@ -294,61 +409,29 @@ class StatAllocation(BaseModel):
     intelligence: int = 0
     vitality: int = 0
 
-class MonsterResponse(BaseModel):
-    id: int
-    name: str
-    base_hp: int
-    base_mp: int
-    base_strength: int
-    base_agility: int
-    base_intelligence: int
-    base_vitality: int
-    sprite: str
-    capture_rate: float
-    xp_reward: int
-    description: Optional[str]
-
-class AllyResponse(BaseModel):
-    id: int
-    player_id: int
-    monster_id: int
-    name: str
-    level: int
-    xp: int
-    xp_to_next: int
-    hp: int
-    max_hp: int
-    mp: int
-    max_mp: int
-    strength: int
-    agility: int
-    intelligence: int
-    vitality: int
-    stat_points: int
-    in_party: bool
-    party_slot: Optional[int]
-
-class AbilityResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str]
-    mp_cost: int
-    damage_multiplier: float
-    ability_type: str
-    element: Optional[str]
-    required_level: int
-    sprite: Optional[str]
-
 class CaptureRequest(BaseModel):
     monster_id: int
     name: str
 
-class PartyUpdate(BaseModel):
-    ally_ids: List[int]
-
 class PositionUpdate(BaseModel):
     x: float
     y: float
+    current_map: Optional[str] = None
+
+class ChatMessage(BaseModel):
+    message: str
+    channel: str = 'global'
+
+class FriendRequest(BaseModel):
+    target_player_id: int
+
+class TradeOffer(BaseModel):
+    to_player_id: int
+    offer_gold: int = 0
+    offer_ally_id: Optional[int] = None
+
+class DuelRequest(BaseModel):
+    opponent_id: int
 
 # ==================== AUTH HELPERS ====================
 
@@ -431,7 +514,6 @@ async def login(data: UserLogin, response: Response, request: Request):
     identifier = f"{client_ip}:{email}"
     
     async with db_pool.acquire() as conn:
-        # Check brute force
         attempt = await conn.fetchrow('SELECT attempts, last_attempt FROM login_attempts WHERE identifier = $1', identifier)
         if attempt and attempt['attempts'] >= 5:
             if datetime.now(timezone.utc) - attempt['last_attempt'].replace(tzinfo=timezone.utc) < timedelta(minutes=15):
@@ -439,14 +521,12 @@ async def login(data: UserLogin, response: Response, request: Request):
         
         user = await conn.fetchrow('SELECT id, email, username, role, password_hash FROM users WHERE email = $1', email)
         if not user or not verify_password(data.password, user['password_hash']):
-            # Record failed attempt
             if attempt:
                 await conn.execute('UPDATE login_attempts SET attempts = attempts + 1, last_attempt = NOW() WHERE identifier = $1', identifier)
             else:
                 await conn.execute('INSERT INTO login_attempts (identifier) VALUES ($1)', identifier)
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
-        # Clear attempts on success
         await conn.execute('DELETE FROM login_attempts WHERE identifier = $1', identifier)
         
         user_dict = {"id": user['id'], "email": user['email'], "username": user['username'], "role": user['role']}
@@ -471,7 +551,7 @@ async def get_me(request: Request):
 
 # ==================== PLAYER ENDPOINTS ====================
 
-@api_router.post("/player", response_model=PlayerResponse)
+@api_router.post("/player")
 async def create_player(data: PlayerCreate, request: Request):
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
@@ -480,12 +560,11 @@ async def create_player(data: PlayerCreate, request: Request):
             raise HTTPException(status_code=400, detail="Player already exists")
         
         player = await conn.fetchrow('''
-            INSERT INTO players (user_id, name) VALUES ($1, $2)
+            INSERT INTO players (user_id, name, current_map, position_x, position_y) VALUES ($1, $2, 'forest', 100, 400)
             RETURNING id, user_id, name, level, xp, xp_to_next, hp, max_hp, mp, max_mp, 
-                      strength, agility, intelligence, vitality, stat_points, position_x, position_y, sprite
+                      strength, agility, intelligence, vitality, stat_points, position_x, position_y, current_map, gold, sprite
         ''', user['id'], data.name)
         
-        # Grant starting abilities
         await conn.execute('''
             INSERT INTO entity_abilities (player_id, ability_id)
             SELECT $1, id FROM abilities WHERE required_level <= 1
@@ -493,26 +572,32 @@ async def create_player(data: PlayerCreate, request: Request):
         
         return dict(player)
 
-@api_router.get("/player", response_model=PlayerResponse)
+@api_router.get("/player")
 async def get_player(request: Request):
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
         player = await conn.fetchrow('''
             SELECT id, user_id, name, level, xp, xp_to_next, hp, max_hp, mp, max_mp,
-                   strength, agility, intelligence, vitality, stat_points, position_x, position_y, sprite
+                   strength, agility, intelligence, vitality, stat_points, position_x, position_y, 
+                   COALESCE(current_map, 'forest') as current_map, COALESCE(gold, 100) as gold, sprite
             FROM players WHERE user_id = $1
         ''', user['id'])
         if not player:
-            raise HTTPException(status_code=404, detail="Player not found. Create one first.")
+            raise HTTPException(status_code=404, detail="Player not found")
         return dict(player)
 
 @api_router.put("/player/position")
 async def update_position(data: PositionUpdate, request: Request):
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
-        await conn.execute('''
-            UPDATE players SET position_x = $1, position_y = $2 WHERE user_id = $3
-        ''', data.x, data.y, user['id'])
+        if data.current_map:
+            await conn.execute('''
+                UPDATE players SET position_x = $1, position_y = $2, current_map = $3 WHERE user_id = $4
+            ''', data.x, data.y, data.current_map, user['id'])
+        else:
+            await conn.execute('''
+                UPDATE players SET position_x = $1, position_y = $2 WHERE user_id = $3
+            ''', data.x, data.y, user['id'])
         return {"success": True}
 
 @api_router.put("/player/stats")
@@ -525,8 +610,6 @@ async def allocate_stats(data: StatAllocation, request: Request):
         if not player or player['stat_points'] < total:
             raise HTTPException(status_code=400, detail="Not enough stat points")
         
-        # Update stats
-        new_vitality = player['vitality'] + data.vitality
         hp_bonus = data.vitality * 10
         mp_bonus = data.intelligence * 5
         
@@ -546,7 +629,6 @@ async def allocate_stats(data: StatAllocation, request: Request):
 
 @api_router.post("/player/heal")
 async def heal_player(request: Request):
-    """Fully heal player and party"""
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
         await conn.execute('UPDATE players SET hp = max_hp, mp = max_mp WHERE user_id = $1', user['id'])
@@ -557,19 +639,20 @@ async def heal_player(request: Request):
 
 # ==================== MONSTER ENDPOINTS ====================
 
-@api_router.get("/monsters", response_model=List[MonsterResponse])
+@api_router.get("/monsters")
 async def get_monsters():
     async with db_pool.acquire() as conn:
         monsters = await conn.fetch('SELECT * FROM monsters')
         return [dict(m) for m in monsters]
 
 @api_router.get("/monsters/random")
-async def get_random_encounter():
-    """Get random monsters for an encounter (1-3 monsters)"""
+async def get_random_encounter(zone: str = 'forest'):
     import random
     async with db_pool.acquire() as conn:
-        monsters = await conn.fetch('SELECT * FROM monsters ORDER BY RANDOM() LIMIT $1', random.randint(1, 3))
-        # Create encounter instances with unique IDs
+        monsters = await conn.fetch('SELECT * FROM monsters WHERE zone = $1 ORDER BY RANDOM() LIMIT $2', zone, random.randint(1, 3))
+        if not monsters:
+            monsters = await conn.fetch('SELECT * FROM monsters ORDER BY RANDOM() LIMIT $1', random.randint(1, 3))
+        
         encounter = []
         for i, m in enumerate(monsters):
             monster = dict(m)
@@ -581,19 +664,22 @@ async def get_random_encounter():
 
 # ==================== ALLY/CAPTURE ENDPOINTS ====================
 
-@api_router.get("/allies", response_model=List[AllyResponse])
+@api_router.get("/allies")
 async def get_allies(request: Request):
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
         player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
         if not player:
             return []
-        allies = await conn.fetch('SELECT * FROM captured_allies WHERE player_id = $1 ORDER BY captured_at', player['id'])
+        allies = await conn.fetch('''
+            SELECT ca.*, m.sprite FROM captured_allies ca 
+            JOIN monsters m ON ca.monster_id = m.id 
+            WHERE ca.player_id = $1 ORDER BY ca.captured_at
+        ''', player['id'])
         return [dict(a) for a in allies]
 
 @api_router.post("/allies/capture")
 async def capture_monster(data: CaptureRequest, request: Request):
-    """Capture a monster and add to collection"""
     import random
     user = await get_current_user(request)
     
@@ -606,20 +692,21 @@ async def capture_monster(data: CaptureRequest, request: Request):
         if not monster:
             raise HTTPException(status_code=404, detail="Monster not found")
         
-        # Check capture success
         if random.random() > monster['capture_rate']:
             return {"success": False, "message": f"{monster['name']} escaped!"}
         
-        # Create captured ally
         ally = await conn.fetchrow('''
             INSERT INTO captured_allies (player_id, monster_id, name, hp, max_hp, mp, max_mp, strength, agility, intelligence, vitality)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING *
+            RETURNING id, player_id, monster_id, name, level, xp, xp_to_next, hp, max_hp, mp, max_mp, strength, agility, intelligence, vitality, stat_points, in_party, party_slot
         ''', player['id'], monster['id'], data.name, monster['base_hp'], monster['base_hp'], 
             monster['base_mp'], monster['base_mp'], monster['base_strength'], monster['base_agility'],
             monster['base_intelligence'], monster['base_vitality'])
         
-        return {"success": True, "ally": dict(ally), "message": f"Captured {data.name}!"}
+        ally_dict = dict(ally)
+        ally_dict['sprite'] = monster['sprite']
+        
+        return {"success": True, "ally": ally_dict, "message": f"Captured {data.name}!"}
 
 @api_router.put("/allies/{ally_id}/party")
 async def toggle_party(ally_id: int, request: Request):
@@ -630,15 +717,12 @@ async def toggle_party(ally_id: int, request: Request):
         if not ally:
             raise HTTPException(status_code=404, detail="Ally not found")
         
-        # Count current party members
         party_count = await conn.fetchval('SELECT COUNT(*) FROM captured_allies WHERE player_id = $1 AND in_party = TRUE', player['id'])
         
         if ally['in_party']:
-            # Remove from party
             await conn.execute('UPDATE captured_allies SET in_party = FALSE, party_slot = NULL WHERE id = $1', ally_id)
             return {"success": True, "in_party": False}
         else:
-            # Add to party (max 3 allies + player = 4 total)
             if party_count >= 3:
                 raise HTTPException(status_code=400, detail="Party is full (max 3 allies)")
             next_slot = await conn.fetchval('''
@@ -649,7 +733,6 @@ async def toggle_party(ally_id: int, request: Request):
 
 @api_router.get("/party")
 async def get_party(request: Request):
-    """Get player and all party allies for combat"""
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
         player = await conn.fetchrow('''
@@ -676,7 +759,7 @@ async def get_party(request: Request):
 
 # ==================== ABILITY ENDPOINTS ====================
 
-@api_router.get("/abilities", response_model=List[AbilityResponse])
+@api_router.get("/abilities")
 async def get_all_abilities():
     async with db_pool.acquire() as conn:
         abilities = await conn.fetch('SELECT * FROM abilities ORDER BY required_level')
@@ -688,7 +771,7 @@ async def get_player_abilities(request: Request):
     async with db_pool.acquire() as conn:
         player = await conn.fetchrow('SELECT id, level FROM players WHERE user_id = $1', user['id'])
         if not player:
-            return []
+            return {"unlocked": [], "available": []}
         
         abilities = await conn.fetch('''
             SELECT a.* FROM abilities a
@@ -696,7 +779,6 @@ async def get_player_abilities(request: Request):
             WHERE ea.player_id = $1
         ''', player['id'])
         
-        # Also get abilities that can be unlocked
         available = await conn.fetch('''
             SELECT * FROM abilities 
             WHERE required_level <= $1 
@@ -720,7 +802,6 @@ async def unlock_ability(ability_id: int, request: Request):
         if player['level'] < ability['required_level']:
             raise HTTPException(status_code=400, detail=f"Requires level {ability['required_level']}")
         
-        # Check if already unlocked
         existing = await conn.fetchrow('SELECT id FROM entity_abilities WHERE player_id = $1 AND ability_id = $2', player['id'], ability_id)
         if existing:
             raise HTTPException(status_code=400, detail="Already unlocked")
@@ -728,13 +809,13 @@ async def unlock_ability(ability_id: int, request: Request):
         await conn.execute('INSERT INTO entity_abilities (player_id, ability_id) VALUES ($1, $2)', player['id'], ability_id)
         return {"success": True, "ability": dict(ability)}
 
-# ==================== COMBAT/XP ENDPOINTS ====================
+# ==================== COMBAT ENDPOINTS ====================
 
 @api_router.post("/combat/victory")
 async def combat_victory(request: Request):
-    """Process victory rewards - XP and potential level ups"""
     body = await request.json()
     xp_gained = body.get('xp', 0)
+    defeated_monsters = body.get('defeated_monsters', [])
     
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
@@ -748,7 +829,6 @@ async def combat_victory(request: Request):
         new_level = player['level']
         xp_to_next = player['xp_to_next']
         
-        # Check for level ups
         while new_xp >= xp_to_next:
             new_xp -= xp_to_next
             new_level += 1
@@ -756,7 +836,6 @@ async def combat_victory(request: Request):
             stat_points_gained += 5
             xp_to_next = int(xp_to_next * 1.5)
         
-        # Update player
         hp_bonus = level_ups * 10
         mp_bonus = level_ups * 5
         await conn.execute('''
@@ -768,7 +847,15 @@ async def combat_victory(request: Request):
             WHERE id = $7
         ''', new_xp, new_level, xp_to_next, stat_points_gained, hp_bonus, mp_bonus, player['id'])
         
-        # Also give XP to party allies
+        # Update quest progress
+        for monster_id in defeated_monsters:
+            await conn.execute('''
+                UPDATE player_quests pq SET progress = progress + 1
+                FROM quests q
+                WHERE pq.quest_id = q.id AND pq.player_id = $1 AND q.required_monster_id = $2 AND pq.completed = FALSE
+            ''', player['id'], monster_id)
+        
+        # Give XP to party allies
         allies = await conn.fetch('SELECT * FROM captured_allies WHERE player_id = $1 AND in_party = TRUE', player['id'])
         ally_level_ups = []
         for ally in allies:
@@ -789,7 +876,6 @@ async def combat_victory(request: Request):
                 WHERE id = $5
             ''', ally_xp, ally_level, ally_xp_to_next, ally_stat_points, ally['id'])
         
-        # Check for new abilities to unlock
         if level_ups > 0:
             await conn.execute('''
                 INSERT INTO entity_abilities (player_id, ability_id)
@@ -809,7 +895,6 @@ async def combat_victory(request: Request):
 
 @api_router.post("/combat/save-state")
 async def save_combat_state(request: Request):
-    """Save HP/MP after combat"""
     body = await request.json()
     party_state = body.get('party', [])
     
@@ -827,12 +912,271 @@ async def save_combat_state(request: Request):
         
         return {"success": True}
 
-# ==================== WEBSOCKET MULTIPLAYER ====================
+# ==================== FRIEND ENDPOINTS ====================
+
+@api_router.get("/friends")
+async def get_friends(request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        if not player:
+            return {"friends": [], "pending": [], "requests": []}
+        
+        friends = await conn.fetch('''
+            SELECT p.id, p.name, p.level, f.status FROM friends f
+            JOIN players p ON f.friend_player_id = p.id
+            WHERE f.player_id = $1 AND f.status = 'accepted'
+        ''', player['id'])
+        
+        pending = await conn.fetch('''
+            SELECT p.id, p.name, p.level FROM friends f
+            JOIN players p ON f.friend_player_id = p.id
+            WHERE f.player_id = $1 AND f.status = 'pending'
+        ''', player['id'])
+        
+        requests = await conn.fetch('''
+            SELECT p.id, p.name, p.level, f.id as request_id FROM friends f
+            JOIN players p ON f.player_id = p.id
+            WHERE f.friend_player_id = $1 AND f.status = 'pending'
+        ''', player['id'])
+        
+        return {
+            "friends": [dict(f) for f in friends],
+            "pending": [dict(p) for p in pending],
+            "requests": [dict(r) for r in requests]
+        }
+
+@api_router.post("/friends/request")
+async def send_friend_request(data: FriendRequest, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        target = await conn.fetchrow('SELECT id, name FROM players WHERE id = $1', data.target_player_id)
+        
+        if not target:
+            raise HTTPException(status_code=404, detail="Player not found")
+        if player['id'] == target['id']:
+            raise HTTPException(status_code=400, detail="Cannot friend yourself")
+        
+        existing = await conn.fetchrow('''
+            SELECT id FROM friends WHERE player_id = $1 AND friend_player_id = $2
+        ''', player['id'], target['id'])
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Request already exists")
+        
+        await conn.execute('''
+            INSERT INTO friends (player_id, friend_player_id, status) VALUES ($1, $2, 'pending')
+        ''', player['id'], target['id'])
+        
+        return {"success": True, "message": f"Friend request sent to {target['name']}!"}
+
+@api_router.post("/friends/accept/{request_id}")
+async def accept_friend(request_id: int, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        
+        friend_req = await conn.fetchrow('''
+            SELECT * FROM friends WHERE id = $1 AND friend_player_id = $2 AND status = 'pending'
+        ''', request_id, player['id'])
+        
+        if not friend_req:
+            raise HTTPException(status_code=404, detail="Request not found")
+        
+        await conn.execute("UPDATE friends SET status = 'accepted' WHERE id = $1", request_id)
+        
+        # Create reverse friendship
+        await conn.execute('''
+            INSERT INTO friends (player_id, friend_player_id, status) VALUES ($1, $2, 'accepted')
+            ON CONFLICT DO NOTHING
+        ''', player['id'], friend_req['player_id'])
+        
+        return {"success": True}
+
+# ==================== CHAT ENDPOINTS ====================
+
+@api_router.get("/chat/messages")
+async def get_chat_messages(channel: str = 'global', limit: int = 50):
+    async with db_pool.acquire() as conn:
+        messages = await conn.fetch('''
+            SELECT cm.id, cm.message, cm.channel, cm.created_at, p.name as sender_name
+            FROM chat_messages cm
+            JOIN players p ON cm.player_id = p.id
+            WHERE cm.channel = $1
+            ORDER BY cm.created_at DESC
+            LIMIT $2
+        ''', channel, limit)
+        return [dict(m) for m in reversed(messages)]
+
+@api_router.post("/chat/send")
+async def send_chat_message(data: ChatMessage, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, name FROM players WHERE user_id = $1', user['id'])
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        msg = await conn.fetchrow('''
+            INSERT INTO chat_messages (player_id, message, channel) VALUES ($1, $2, $3)
+            RETURNING id, message, channel, created_at
+        ''', player['id'], data.message, data.channel)
+        
+        return {"success": True, "message": {**dict(msg), "sender_name": player['name']}}
+
+# ==================== NPC ENDPOINTS ====================
+
+@api_router.get("/npcs")
+async def get_npcs(zone: str = None):
+    async with db_pool.acquire() as conn:
+        if zone:
+            npcs = await conn.fetch('SELECT * FROM npcs WHERE zone = $1', zone)
+        else:
+            npcs = await conn.fetch('SELECT * FROM npcs')
+        
+        result = []
+        for npc in npcs:
+            npc_dict = dict(npc)
+            if npc_dict.get('shop_items') and isinstance(npc_dict['shop_items'], str):
+                npc_dict['shop_items'] = json.loads(npc_dict['shop_items'])
+            result.append(npc_dict)
+        return result
+
+@api_router.post("/npcs/{npc_id}/interact")
+async def interact_npc(npc_id: int, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, gold FROM players WHERE user_id = $1', user['id'])
+        npc = await conn.fetchrow('SELECT * FROM npcs WHERE id = $1', npc_id)
+        
+        if not npc:
+            raise HTTPException(status_code=404, detail="NPC not found")
+        
+        npc_dict = dict(npc)
+        if npc_dict.get('shop_items') and isinstance(npc_dict['shop_items'], str):
+            npc_dict['shop_items'] = json.loads(npc_dict['shop_items'])
+        
+        if npc['npc_type'] == 'healer':
+            await conn.execute('UPDATE players SET hp = max_hp, mp = max_mp WHERE id = $1', player['id'])
+            await conn.execute('UPDATE captured_allies SET hp = max_hp, mp = max_mp WHERE player_id = $1', player['id'])
+            return {"success": True, "type": "healer", "message": "Your party has been fully healed!", "npc": npc_dict}
+        
+        return {"success": True, "type": npc['npc_type'], "npc": npc_dict}
+
+@api_router.post("/npcs/{npc_id}/buy")
+async def buy_from_npc(npc_id: int, request: Request):
+    body = await request.json()
+    item_index = body.get('item_index', 0)
+    
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, gold, strength, vitality FROM players WHERE user_id = $1', user['id'])
+        npc = await conn.fetchrow('SELECT * FROM npcs WHERE id = $1', npc_id)
+        
+        if not npc or npc['npc_type'] != 'shop':
+            raise HTTPException(status_code=404, detail="Shop not found")
+        
+        shop_items = json.loads(npc['shop_items']) if isinstance(npc['shop_items'], str) else npc['shop_items']
+        
+        if item_index >= len(shop_items):
+            raise HTTPException(status_code=400, detail="Invalid item")
+        
+        item = shop_items[item_index]
+        if player['gold'] < item['price']:
+            raise HTTPException(status_code=400, detail="Not enough gold")
+        
+        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', item['price'], player['id'])
+        
+        if item['effect'] == 'heal':
+            await conn.execute('UPDATE players SET hp = LEAST(hp + $1, max_hp) WHERE id = $2', item['value'], player['id'])
+        elif item['effect'] == 'mp':
+            await conn.execute('UPDATE players SET mp = LEAST(mp + $1, max_mp) WHERE id = $2', item['value'], player['id'])
+        elif item['effect'] == 'strength':
+            await conn.execute('UPDATE players SET strength = strength + $1 WHERE id = $2', item['value'], player['id'])
+        elif item['effect'] == 'vitality':
+            await conn.execute('UPDATE players SET vitality = vitality + $1, max_hp = max_hp + $2 WHERE id = $3', item['value'], item['value'] * 10, player['id'])
+        
+        return {"success": True, "message": f"Purchased {item['name']}!"}
+
+# ==================== QUEST ENDPOINTS ====================
+
+@api_router.get("/quests")
+async def get_quests(request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        
+        available = await conn.fetch('''
+            SELECT q.*, n.name as npc_name, m.name as monster_name FROM quests q
+            JOIN npcs n ON q.npc_id = n.id
+            JOIN monsters m ON q.required_monster_id = m.id
+            WHERE q.id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $1)
+        ''', player['id'])
+        
+        active = await conn.fetch('''
+            SELECT q.*, pq.progress, pq.completed, n.name as npc_name, m.name as monster_name FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            JOIN npcs n ON q.npc_id = n.id
+            JOIN monsters m ON q.required_monster_id = m.id
+            WHERE pq.player_id = $1 AND pq.completed = FALSE
+        ''', player['id'])
+        
+        completed = await conn.fetch('''
+            SELECT q.*, n.name as npc_name, m.name as monster_name FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            JOIN npcs n ON q.npc_id = n.id
+            JOIN monsters m ON q.required_monster_id = m.id
+            WHERE pq.player_id = $1 AND pq.completed = TRUE
+        ''', player['id'])
+        
+        return {
+            "available": [dict(q) for q in available],
+            "active": [dict(q) for q in active],
+            "completed": [dict(q) for q in completed]
+        }
+
+@api_router.post("/quests/{quest_id}/accept")
+async def accept_quest(quest_id: int, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        
+        existing = await conn.fetchrow('SELECT id FROM player_quests WHERE player_id = $1 AND quest_id = $2', player['id'], quest_id)
+        if existing:
+            raise HTTPException(status_code=400, detail="Quest already accepted")
+        
+        await conn.execute('INSERT INTO player_quests (player_id, quest_id) VALUES ($1, $2)', player['id'], quest_id)
+        return {"success": True}
+
+@api_router.post("/quests/{quest_id}/complete")
+async def complete_quest(quest_id: int, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        
+        pq = await conn.fetchrow('''
+            SELECT pq.*, q.required_count, q.reward_gold, q.reward_xp FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND pq.quest_id = $2 AND pq.completed = FALSE
+        ''', player['id'], quest_id)
+        
+        if not pq:
+            raise HTTPException(status_code=404, detail="Quest not found")
+        
+        if pq['progress'] < pq['required_count']:
+            raise HTTPException(status_code=400, detail="Quest not complete yet")
+        
+        await conn.execute('UPDATE player_quests SET completed = TRUE WHERE id = $1', pq['id'])
+        await conn.execute('UPDATE players SET gold = gold + $1, xp = xp + $2 WHERE id = $3', pq['reward_gold'], pq['reward_xp'], player['id'])
+        
+        return {"success": True, "reward_gold": pq['reward_gold'], "reward_xp": pq['reward_xp']}
+
+# ==================== WEBSOCKET ====================
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, WebSocket] = {}
-        self.player_positions: Dict[int, dict] = {}
+        self.player_data: Dict[int, dict] = {}
     
     async def connect(self, websocket: WebSocket, player_id: int):
         await websocket.accept()
@@ -842,29 +1186,30 @@ class ConnectionManager:
     def disconnect(self, player_id: int):
         if player_id in self.active_connections:
             del self.active_connections[player_id]
-        if player_id in self.player_positions:
-            del self.player_positions[player_id]
-        logger.info(f"Player {player_id} disconnected. Total: {len(self.active_connections)}")
+        if player_id in self.player_data:
+            del self.player_data[player_id]
+        logger.info(f"Player {player_id} disconnected")
     
-    async def broadcast_positions(self):
-        if not self.active_connections:
-            return
-        message = json.dumps({"type": "positions", "players": self.player_positions})
+    async def broadcast(self, message: dict):
         disconnected = []
         for player_id, ws in self.active_connections.items():
             try:
-                await ws.send_text(message)
+                await ws.send_text(json.dumps(message))
             except:
                 disconnected.append(player_id)
         for pid in disconnected:
             self.disconnect(pid)
     
-    def update_position(self, player_id: int, data: dict):
-        self.player_positions[player_id] = data
+    async def send_to(self, player_id: int, message: dict):
+        if player_id in self.active_connections:
+            try:
+                await self.active_connections[player_id].send_text(json.dumps(message))
+            except:
+                self.disconnect(player_id)
 
 manager = ConnectionManager()
 
-@app.websocket("/ws/{player_id}")
+@app.websocket("/api/ws/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, player_id: int):
     await manager.connect(websocket, player_id)
     try:
@@ -873,18 +1218,53 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
             msg = json.loads(data)
             
             if msg.get('type') == 'position':
-                manager.update_position(player_id, {
+                manager.player_data[player_id] = {
                     'id': player_id,
                     'name': msg.get('name', ''),
                     'x': msg.get('x', 0),
                     'y': msg.get('y', 0),
+                    'current_map': msg.get('current_map', 'forest'),
                     'sprite': msg.get('sprite', 'player'),
                     'facing': msg.get('facing', 'right')
+                }
+                await manager.broadcast({"type": "positions", "players": manager.player_data})
+            
+            elif msg.get('type') == 'chat':
+                await manager.broadcast({
+                    "type": "chat",
+                    "sender_id": player_id,
+                    "sender_name": msg.get('name', 'Unknown'),
+                    "message": msg.get('message', ''),
+                    "channel": msg.get('channel', 'global')
                 })
-                await manager.broadcast_positions()
+            
+            elif msg.get('type') == 'friend_request':
+                target_id = msg.get('target_id')
+                await manager.send_to(target_id, {
+                    "type": "friend_request",
+                    "from_id": player_id,
+                    "from_name": msg.get('name', 'Unknown')
+                })
+            
+            elif msg.get('type') == 'duel_request':
+                target_id = msg.get('target_id')
+                await manager.send_to(target_id, {
+                    "type": "duel_request",
+                    "from_id": player_id,
+                    "from_name": msg.get('name', 'Unknown')
+                })
+            
+            elif msg.get('type') == 'trade_request':
+                target_id = msg.get('target_id')
+                await manager.send_to(target_id, {
+                    "type": "trade_request",
+                    "from_id": player_id,
+                    "from_name": msg.get('name', 'Unknown')
+                })
+                
     except WebSocketDisconnect:
         manager.disconnect(player_id)
-        await manager.broadcast_positions()
+        await manager.broadcast({"type": "positions", "players": manager.player_data})
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(player_id)
@@ -893,7 +1273,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Game Engine API", "version": "1.0.0"}
+    return {"message": "Game Engine API", "version": "2.0.0"}
 
 @api_router.get("/health")
 async def health():

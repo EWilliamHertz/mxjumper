@@ -10,9 +10,7 @@ const GameContext = createContext(null);
 
 export const useGame = () => {
   const context = useContext(GameContext);
-  if (!context) {
-    throw new Error('useGame must be used within GameProvider');
-  }
+  if (!context) throw new Error('useGame must be used within GameProvider');
   return context;
 };
 
@@ -23,8 +21,14 @@ export const GameProvider = ({ children }) => {
   const [allies, setAllies] = useState([]);
   const [abilities, setAbilities] = useState({ unlocked: [], available: [] });
   const [otherPlayers, setOtherPlayers] = useState({});
-  const [gameState, setGameState] = useState('overworld'); // overworld, combat, menu
+  const [gameState, setGameState] = useState('overworld');
   const [combatData, setCombatData] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [friends, setFriends] = useState({ friends: [], pending: [], requests: [] });
+  const [quests, setQuests] = useState({ available: [], active: [], completed: [] });
+  const [npcs, setNpcs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  
   const wsRef = useRef(null);
 
   const getAuthHeader = useCallback(() => {
@@ -39,9 +43,7 @@ export const GameProvider = ({ children }) => {
       setPlayer(data);
       return data;
     } catch (err) {
-      if (err.response?.status === 404) {
-        setPlayer(null);
-      }
+      if (err.response?.status === 404) setPlayer(null);
       return null;
     }
   }, [getAuthHeader]);
@@ -124,12 +126,25 @@ export const GameProvider = ({ children }) => {
     }
   }, [getAuthHeader, fetchAbilities]);
 
+  // Update position with map
+  const updatePosition = useCallback(async (x, y, currentMap = null) => {
+    if (player) {
+      try {
+        const payload = { x, y };
+        if (currentMap) payload.current_map = currentMap;
+        await axios.put(`${API}/player/position`, payload, { headers: getAuthHeader() });
+      } catch (err) {
+        // Ignore position update errors
+      }
+    }
+  }, [player, getAuthHeader]);
+
   // Start random encounter
-  const startEncounter = useCallback(async () => {
+  const startEncounter = useCallback(async (zone = 'forest') => {
     try {
       const [partyData, enemiesResponse] = await Promise.all([
         fetchParty(),
-        axios.get(`${API}/monsters/random`, { headers: getAuthHeader() })
+        axios.get(`${API}/monsters/random?zone=${zone}`, { headers: getAuthHeader() })
       ]);
       
       setCombatData({
@@ -143,16 +158,17 @@ export const GameProvider = ({ children }) => {
     }
   }, [fetchParty, getAuthHeader]);
 
-  // Process combat victory
-  const processVictory = useCallback(async (xp, partyState) => {
+  // Process victory
+  const processVictory = useCallback(async (xp, partyState, defeatedMonsters = []) => {
     try {
       const [victoryData] = await Promise.all([
-        axios.post(`${API}/combat/victory`, { xp }, { headers: getAuthHeader() }),
+        axios.post(`${API}/combat/victory`, { xp, defeated_monsters: defeatedMonsters }, { headers: getAuthHeader() }),
         axios.post(`${API}/combat/save-state`, { party: partyState }, { headers: getAuthHeader() })
       ]);
       
       await fetchPlayer();
       await fetchParty();
+      await fetchAllies();
       setGameState('overworld');
       setCombatData(null);
       
@@ -160,7 +176,7 @@ export const GameProvider = ({ children }) => {
     } catch (err) {
       return { success: false, error: err.response?.data?.detail };
     }
-  }, [getAuthHeader, fetchPlayer, fetchParty]);
+  }, [getAuthHeader, fetchPlayer, fetchParty, fetchAllies]);
 
   // Capture monster
   const captureMonster = useCallback(async (monsterId, name) => {
@@ -187,29 +203,148 @@ export const GameProvider = ({ children }) => {
     }
   }, [getAuthHeader, fetchPlayer, fetchParty]);
 
-  // Update position
-  const updatePosition = useCallback(async (x, y) => {
-    if (player) {
-      try {
-        await axios.put(`${API}/player/position`, { x, y }, { headers: getAuthHeader() });
-      } catch (err) {
-        // Ignore position update errors
-      }
+  // Chat
+  const fetchChatMessages = useCallback(async (channel = 'global') => {
+    try {
+      const { data } = await axios.get(`${API}/chat/messages?channel=${channel}`, { headers: getAuthHeader() });
+      setChatMessages(data);
+      return data;
+    } catch (err) {
+      return [];
     }
-  }, [player, getAuthHeader]);
+  }, [getAuthHeader]);
 
-  // WebSocket connection
+  const sendChatMessage = useCallback(async (message, channel = 'global') => {
+    try {
+      const { data } = await axios.post(`${API}/chat/send`, { message, channel }, { headers: getAuthHeader() });
+      // Also broadcast via WebSocket
+      if (wsRef.current?.readyState === WebSocket.OPEN && player) {
+        wsRef.current.send(JSON.stringify({
+          type: 'chat',
+          name: player.name,
+          message,
+          channel
+        }));
+      }
+      return data;
+    } catch (err) {
+      return { success: false };
+    }
+  }, [getAuthHeader, player]);
+
+  // Friends
+  const fetchFriends = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/friends`, { headers: getAuthHeader() });
+      setFriends(data);
+      return data;
+    } catch (err) {
+      return { friends: [], pending: [], requests: [] };
+    }
+  }, [getAuthHeader]);
+
+  const sendFriendRequest = useCallback(async (targetPlayerId) => {
+    try {
+      const { data } = await axios.post(`${API}/friends/request`, { target_player_id: targetPlayerId }, { headers: getAuthHeader() });
+      // Broadcast via WebSocket
+      if (wsRef.current?.readyState === WebSocket.OPEN && player) {
+        wsRef.current.send(JSON.stringify({
+          type: 'friend_request',
+          name: player.name,
+          target_id: targetPlayerId
+        }));
+      }
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, player]);
+
+  const acceptFriend = useCallback(async (requestId) => {
+    try {
+      const { data } = await axios.post(`${API}/friends/accept/${requestId}`, {}, { headers: getAuthHeader() });
+      await fetchFriends();
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, fetchFriends]);
+
+  // NPCs
+  const fetchNpcs = useCallback(async (zone) => {
+    try {
+      const { data } = await axios.get(`${API}/npcs${zone ? `?zone=${zone}` : ''}`, { headers: getAuthHeader() });
+      setNpcs(data);
+      return data;
+    } catch (err) {
+      return [];
+    }
+  }, [getAuthHeader]);
+
+  const interactNpc = useCallback(async (npcId) => {
+    try {
+      const { data } = await axios.post(`${API}/npcs/${npcId}/interact`, {}, { headers: getAuthHeader() });
+      if (data.type === 'healer') {
+        await fetchPlayer();
+        await fetchParty();
+      }
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, fetchPlayer, fetchParty]);
+
+  const buyFromNpc = useCallback(async (npcId, itemIndex) => {
+    try {
+      const { data } = await axios.post(`${API}/npcs/${npcId}/buy`, { item_index: itemIndex }, { headers: getAuthHeader() });
+      await fetchPlayer();
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, fetchPlayer]);
+
+  // Quests
+  const fetchQuests = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/quests`, { headers: getAuthHeader() });
+      setQuests(data);
+      return data;
+    } catch (err) {
+      return { available: [], active: [], completed: [] };
+    }
+  }, [getAuthHeader]);
+
+  const acceptQuest = useCallback(async (questId) => {
+    try {
+      const { data } = await axios.post(`${API}/quests/${questId}/accept`, {}, { headers: getAuthHeader() });
+      await fetchQuests();
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, fetchQuests]);
+
+  const completeQuest = useCallback(async (questId) => {
+    try {
+      const { data } = await axios.post(`${API}/quests/${questId}/complete`, {}, { headers: getAuthHeader() });
+      await fetchQuests();
+      await fetchPlayer();
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, fetchQuests, fetchPlayer]);
+
+  // WebSocket for multiplayer and chat
   useEffect(() => {
     if (player && gameState === 'overworld') {
-      const ws = new WebSocket(`${WS_URL}/ws/${player.id}`);
+      const ws = new WebSocket(`${WS_URL}/api/ws/${player.id}`);
       wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-      };
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        
         if (data.type === 'positions') {
           const others = {};
           Object.entries(data.players).forEach(([id, p]) => {
@@ -219,70 +354,101 @@ export const GameProvider = ({ children }) => {
           });
           setOtherPlayers(others);
         }
+        
+        if (data.type === 'chat') {
+          setChatMessages(prev => [...prev.slice(-50), {
+            sender_name: data.sender_name,
+            message: data.message,
+            channel: data.channel,
+            created_at: new Date().toISOString()
+          }]);
+        }
+        
+        if (data.type === 'friend_request') {
+          setNotifications(prev => [...prev, {
+            type: 'friend_request',
+            from_name: data.from_name,
+            from_id: data.from_id
+          }]);
+        }
+        
+        if (data.type === 'duel_request') {
+          setNotifications(prev => [...prev, {
+            type: 'duel_request',
+            from_name: data.from_name,
+            from_id: data.from_id
+          }]);
+        }
+        
+        if (data.type === 'trade_request') {
+          setNotifications(prev => [...prev, {
+            type: 'trade_request',
+            from_name: data.from_name,
+            from_id: data.from_id
+          }]);
+        }
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-      };
-
-      return () => {
-        ws.close();
-      };
+      return () => ws.close();
     }
   }, [player, gameState]);
 
   // Send position via WebSocket
-  const sendPosition = useCallback((x, y, facing) => {
+  const sendPosition = useCallback((x, y, facing, currentMap = 'forest') => {
     if (wsRef.current?.readyState === WebSocket.OPEN && player) {
       wsRef.current.send(JSON.stringify({
         type: 'position',
         name: player.name,
         x,
         y,
+        current_map: currentMap,
         sprite: player.sprite,
         facing
       }));
     }
   }, [player]);
 
-  // Initial data fetch
+  // Send multiplayer request
+  const sendMultiplayerRequest = useCallback((type, targetId) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && player) {
+      wsRef.current.send(JSON.stringify({
+        type: type,
+        name: player.name,
+        target_id: targetId
+      }));
+    }
+  }, [player]);
+
+  // Clear notification
+  const clearNotification = useCallback((index) => {
+    setNotifications(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Initial fetch
   useEffect(() => {
     if (user) {
       fetchPlayer();
       fetchAllies();
       fetchAbilities();
+      fetchFriends();
+      fetchQuests();
+      fetchChatMessages();
     }
-  }, [user, fetchPlayer, fetchAllies, fetchAbilities]);
+  }, [user, fetchPlayer, fetchAllies, fetchAbilities, fetchFriends, fetchQuests, fetchChatMessages]);
 
   return (
     <GameContext.Provider value={{
-      player,
-      party,
-      allies,
-      abilities,
-      otherPlayers,
-      gameState,
-      combatData,
-      setGameState,
-      setCombatData,
-      fetchPlayer,
-      createPlayer,
-      fetchParty,
-      fetchAllies,
-      fetchAbilities,
-      toggleParty,
-      allocateStats,
-      unlockAbility,
-      startEncounter,
-      processVictory,
-      captureMonster,
-      healParty,
-      updatePosition,
-      sendPosition
+      player, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications,
+      setGameState, setCombatData,
+      fetchPlayer, createPlayer, fetchParty, fetchAllies, fetchAbilities,
+      toggleParty, allocateStats, unlockAbility,
+      startEncounter, processVictory, captureMonster, healParty,
+      updatePosition, sendPosition,
+      fetchChatMessages, sendChatMessage,
+      fetchFriends, sendFriendRequest, acceptFriend,
+      fetchNpcs, interactNpc, buyFromNpc,
+      fetchQuests, acceptQuest, completeQuest,
+      sendMultiplayerRequest, clearNotification
     }}>
       {children}
     </GameContext.Provider>

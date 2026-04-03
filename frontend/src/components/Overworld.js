@@ -26,6 +26,7 @@ const MAPS = {
     ],
     spawnX: 100,
     spawnY: 400,
+    encounterZone: 'forest',
   },
   cave: {
     name: 'Dark Cave',
@@ -51,6 +52,7 @@ const MAPS = {
     ],
     spawnX: 80,
     spawnY: 400,
+    encounterZone: 'cave',
   },
   mountain: {
     name: 'Rocky Mountain',
@@ -76,15 +78,13 @@ const MAPS = {
     ],
     spawnX: 80,
     spawnY: 400,
+    encounterZone: 'mountain',
   },
   village: {
     name: 'Peaceful Village',
     bgGradient: ['#87CEEB', '#98FB98', '#F5DEB3'],
     platforms: [
       { x: 0, y: 520, width: 1000, height: 80, type: 'ground' },
-      { x: 200, y: 400, width: 200, height: 120, type: 'building' },
-      { x: 500, y: 380, width: 150, height: 140, type: 'building' },
-      { x: 750, y: 420, width: 180, height: 100, type: 'building' },
     ],
     decorations: [
       { x: 50, y: 480, type: 'lamppost' },
@@ -93,6 +93,12 @@ const MAPS = {
     ],
     exits: [
       { x: 0, y: 460, width: 50, height: 60, to: 'mountain', label: '← Mountain' },
+    ],
+    npcs: [
+      { id: 1, x: 250, y: 460, name: 'Elder Oak', type: 'quest_giver' },
+      { id: 4, x: 400, y: 460, name: 'Healer Luna', type: 'healer' },
+      { id: 2, x: 550, y: 460, name: 'Merchant Mari', type: 'shop' },
+      { id: 3, x: 800, y: 460, name: 'Blacksmith Bron', type: 'shop' },
     ],
     spawnX: 80,
     spawnY: 400,
@@ -105,13 +111,17 @@ const JUMP_FORCE = -14;
 const MOVE_SPEED = 5;
 const ENCOUNTER_STEPS = 25;
 const ENCOUNTER_CHANCE = 0.12;
-const AUTO_SAVE_INTERVAL = 10000;
+const AUTO_SAVE_INTERVAL = 5000;
 
 export const Overworld = () => {
   const canvasRef = useRef(null);
-  const { player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition } = useGame();
+  const { 
+    player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
+    chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
+    interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest
+  } = useGame();
   
-  const [currentMap, setCurrentMap] = useState('forest');
+  const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
   const [playerState, setPlayerState] = useState({
     x: player?.position_x || 100,
     y: player?.position_y || 400,
@@ -123,27 +133,53 @@ export const Overworld = () => {
     frame: 0
   });
   
-  const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
-  const [showChat, setShowChat] = useState(false);
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
-  const [showPlayerMenu, setShowPlayerMenu] = useState(false);
+  const [showChat, setShowChat] = useState(true);
+  const [selectedEntity, setSelectedEntity] = useState(null);
+  const [showEntityMenu, setShowEntityMenu] = useState(false);
+  const [npcDialog, setNpcDialog] = useState(null);
   
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
 
   const mapData = MAPS[currentMap];
 
-  // Auto-save
+  // Load saved position
+  useEffect(() => {
+    if (player) {
+      setCurrentMap(player.current_map || 'forest');
+      setPlayerState(prev => ({
+        ...prev,
+        x: player.position_x || 100,
+        y: player.position_y || 400,
+      }));
+    }
+  }, [player]);
+
+  // Auto-save position and map
   useEffect(() => {
     const saveInterval = setInterval(() => {
       if (player && playerState) {
-        updatePosition(playerState.x, playerState.y);
+        updatePosition(playerState.x, playerState.y, currentMap);
         lastSaveRef.current = Date.now();
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(saveInterval);
-  }, [player, playerState, updatePosition]);
+  }, [player, playerState, updatePosition, currentMap]);
+
+  // Save on map change
+  useEffect(() => {
+    if (player) {
+      updatePosition(playerState.x, playerState.y, currentMap);
+    }
+  }, [currentMap]);
+
+  // Fetch NPCs when entering village
+  useEffect(() => {
+    if (currentMap === 'village') {
+      fetchNpcs('village');
+    }
+  }, [currentMap, fetchNpcs]);
 
   // Keyboard input - WASD only
   useEffect(() => {
@@ -153,24 +189,30 @@ export const Overworld = () => {
         keysRef.current[key] = true;
         if (key === ' ') e.preventDefault();
       }
-      if (key === 'enter' && !showChat) {
-        setShowChat(true);
-      } else if (key === 'escape') {
-        setShowChat(false);
-        setShowPlayerMenu(false);
+      if (key === 'enter' && !npcDialog) {
+        if (showChat) {
+          // Send message
+          if (chatInput.trim()) {
+            sendChatMessage(chatInput.trim());
+            setChatInput('');
+          }
+        }
+        e.preventDefault();
       }
-      if (key === 'm') {
-        updatePosition(playerState.x, playerState.y);
+      if (key === 'escape') {
+        setShowEntityMenu(false);
+        setNpcDialog(null);
+      }
+      if (key === 'm' && !npcDialog) {
+        updatePosition(playerState.x, playerState.y, currentMap);
         setGameState('menu');
       }
-      if (key === 'h') {
-        healParty();
-      }
+      if (key === 'h') healParty();
+      if (key === 'e' && npcDialog) setNpcDialog(null);
     };
     
     const handleKeyUp = (e) => {
-      const key = e.key.toLowerCase();
-      keysRef.current[key] = false;
+      keysRef.current[e.key.toLowerCase()] = false;
     };
     
     window.addEventListener('keydown', handleKeyDown);
@@ -180,7 +222,7 @@ export const Overworld = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [showChat, setGameState, healParty, updatePosition, playerState.x, playerState.y]);
+  }, [showChat, chatInput, sendChatMessage, setGameState, healParty, updatePosition, playerState, currentMap, npcDialog]);
 
   // Check map exits
   const checkExits = useCallback((x, y) => {
@@ -195,6 +237,7 @@ export const Overworld = () => {
         y < exit.y + exit.height
       ) {
         const newMap = MAPS[exit.to];
+        updatePosition(newMap.spawnX, newMap.spawnY, exit.to);
         setCurrentMap(exit.to);
         setPlayerState(prev => ({
           ...prev,
@@ -205,16 +248,29 @@ export const Overworld = () => {
       }
     }
     return false;
-  }, [mapData]);
+  }, [mapData, updatePosition]);
 
   // Random encounter
   const checkEncounter = useCallback(async () => {
     if (mapData.noEncounters) return;
     if (Math.random() < ENCOUNTER_CHANCE) {
-      updatePosition(playerState.x, playerState.y);
-      await startEncounter();
+      updatePosition(playerState.x, playerState.y, currentMap);
+      await startEncounter(mapData.encounterZone || 'forest');
     }
-  }, [startEncounter, updatePosition, playerState.x, playerState.y, mapData.noEncounters]);
+  }, [startEncounter, updatePosition, playerState.x, playerState.y, mapData, currentMap]);
+
+  // Check NPC interaction
+  const checkNpcInteraction = useCallback(() => {
+    if (!mapData.npcs) return null;
+    const playerWidth = 40;
+    
+    for (const npc of mapData.npcs) {
+      if (Math.abs(playerState.x + playerWidth/2 - npc.x) < 50 && Math.abs(playerState.y - npc.y) < 60) {
+        return npc;
+      }
+    }
+    return null;
+  }, [mapData, playerState]);
 
   // Game loop
   useEffect(() => {
@@ -228,22 +284,14 @@ export const Overworld = () => {
       const keys = keysRef.current;
       frameCount++;
       
-      if (!showChat) {
+      if (!npcDialog) {
         setPlayerState(prev => {
           let { x, y, vx, vy, onGround, facing, stepCounter, frame } = prev;
           
-          // WASD movement only
           vx = 0;
-          if (keys['a']) {
-            vx = -MOVE_SPEED;
-            facing = 'left';
-          }
-          if (keys['d']) {
-            vx = MOVE_SPEED;
-            facing = 'right';
-          }
+          if (keys['a']) { vx = -MOVE_SPEED; facing = 'left'; }
+          if (keys['d']) { vx = MOVE_SPEED; facing = 'right'; }
           
-          // Jump with W or Space
           if ((keys[' '] || keys['w']) && onGround) {
             vy = JUMP_FORCE;
             onGround = false;
@@ -253,14 +301,10 @@ export const Overworld = () => {
           x += vx;
           y += vy;
           
-          // Animation
           if (Math.abs(vx) > 0) {
             if (frameCount % 8 === 0) frame = (frame + 1) % 4;
-          } else {
-            frame = 0;
-          }
+          } else frame = 0;
           
-          // Encounters
           if (Math.abs(vx) > 0 && onGround && !mapData.noEncounters) {
             stepCounter++;
             if (stepCounter >= ENCOUNTER_STEPS) {
@@ -269,13 +313,11 @@ export const Overworld = () => {
             }
           }
           
-          // Platform collision
           onGround = false;
           const playerWidth = 40;
           const playerHeight = 56;
           
           for (const platform of mapData.platforms) {
-            if (platform.type === 'building') continue;
             if (
               x + playerWidth > platform.x &&
               x < platform.x + platform.width &&
@@ -289,15 +331,9 @@ export const Overworld = () => {
             }
           }
           
-          // Boundaries & exits
-          if (x < 0 || x > canvas.width - playerWidth) {
-            checkExits(x, y);
-          }
+          if (x < 0 || x > canvas.width - playerWidth) checkExits(x, y);
           x = Math.max(0, Math.min(x, canvas.width - playerWidth));
-          if (y > canvas.height) {
-            y = 100;
-            vy = 0;
-          }
+          if (y > canvas.height) { y = 100; vy = 0; }
           
           return { x, y, vx, vy, onGround, facing, stepCounter, frame };
         });
@@ -308,41 +344,50 @@ export const Overworld = () => {
     
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [checkEncounter, checkExits, mapData, showChat]);
+  }, [checkEncounter, checkExits, mapData, npcDialog]);
 
   // Send position
   useEffect(() => {
     const interval = setInterval(() => {
-      sendPosition(playerState.x, playerState.y, playerState.facing);
+      sendPosition(playerState.x, playerState.y, playerState.facing, currentMap);
     }, 50);
     return () => clearInterval(interval);
-  }, [playerState.x, playerState.y, playerState.facing, sendPosition]);
+  }, [playerState.x, playerState.y, playerState.facing, sendPosition, currentMap]);
 
-  // Handle chat
-  const sendChat = () => {
-    if (!chatInput.trim()) return;
-    setChatMessages(prev => [...prev.slice(-20), { sender: player?.name || 'You', message: chatInput, time: Date.now() }]);
-    setChatInput('');
-  };
-
-  // Handle player click
-  const handleCanvasClick = (e) => {
+  // Handle canvas click
+  const handleCanvasClick = async (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
     
-    // Check if clicked on another player
+    // Check NPC click
+    if (mapData.npcs) {
+      for (const npc of mapData.npcs) {
+        if (clickX >= npc.x - 25 && clickX <= npc.x + 25 && clickY >= npc.y - 60 && clickY <= npc.y + 10) {
+          const result = await interactNpc(npc.id);
+          if (npc.type === 'quest_giver') {
+            const questData = await fetchQuests();
+            setNpcDialog({ npc, data: result, quests: questData });
+          } else {
+            setNpcDialog({ npc, data: result });
+          }
+          return;
+        }
+      }
+    }
+    
+    // Check other player click
     for (const [id, other] of Object.entries(otherPlayers)) {
-      if (
-        clickX >= other.x && clickX <= other.x + 40 &&
-        clickY >= other.y && clickY <= other.y + 56
-      ) {
-        setSelectedPlayer({ id, ...other });
-        setShowPlayerMenu(true);
+      if (other.current_map === currentMap &&
+          clickX >= other.x && clickX <= other.x + 40 &&
+          clickY >= other.y && clickY <= other.y + 56) {
+        setSelectedEntity({ type: 'player', id: parseInt(id), ...other });
+        setShowEntityMenu(true);
         return;
       }
     }
-    setShowPlayerMenu(false);
+    
+    setShowEntityMenu(false);
   };
 
   // Draw functions
@@ -375,10 +420,6 @@ export const Overworld = () => {
     ctx.beginPath();
     ctx.arc(x + 15, y + 10, 18, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#32CD32';
-    ctx.beginPath();
-    ctx.arc(x + 25, y + 5, 14, 0, Math.PI * 2);
-    ctx.fill();
   };
 
   const drawStalactite = (ctx, x, y) => {
@@ -391,21 +432,29 @@ export const Overworld = () => {
     ctx.fill();
   };
 
-  const drawBuilding = (ctx, platform) => {
-    ctx.fillStyle = '#d4a574';
-    ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-    ctx.fillStyle = '#8b4513';
+  const drawNPC = (ctx, npc) => {
+    // Body
+    ctx.fillStyle = npc.type === 'healer' ? '#ff69b4' : npc.type === 'shop' ? '#ffd700' : '#9370db';
+    ctx.fillRect(npc.x - 12, npc.y - 30, 24, 30);
+    // Head
+    ctx.fillStyle = '#ffd9b3';
     ctx.beginPath();
-    ctx.moveTo(platform.x - 10, platform.y);
-    ctx.lineTo(platform.x + platform.width / 2, platform.y - 40);
-    ctx.lineTo(platform.x + platform.width + 10, platform.y);
-    ctx.closePath();
+    ctx.arc(npc.x, npc.y - 42, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#4a3728';
-    ctx.fillRect(platform.x + platform.width / 2 - 15, platform.y + platform.height - 50, 30, 50);
-    ctx.fillStyle = '#87CEEB';
-    ctx.fillRect(platform.x + 20, platform.y + 20, 25, 25);
-    ctx.fillRect(platform.x + platform.width - 45, platform.y + 20, 25, 25);
+    // Name
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeText(npc.name, npc.x, npc.y - 58);
+    ctx.fillText(npc.name, npc.x, npc.y - 58);
+    // Interaction hint
+    const nearNpc = checkNpcInteraction();
+    if (nearNpc && nearNpc.id === npc.id) {
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText('[Click to talk]', npc.x, npc.y - 68);
+    }
   };
 
   const drawPlayer = (ctx, x, y, facing, frame, name, isMain = true) => {
@@ -414,27 +463,18 @@ export const Overworld = () => {
     ctx.translate(x + 20, y);
     ctx.scale(flip, 1);
     
-    // Body
     ctx.fillStyle = isMain ? '#4A90D9' : '#888888';
     ctx.fillRect(-15, 20, 30, 30);
-    
-    // Head
     ctx.fillStyle = isMain ? '#FFD9B3' : '#CCCCCC';
     ctx.beginPath();
     ctx.arc(0, 12, 14, 0, Math.PI * 2);
     ctx.fill();
-    
-    // Hair
     ctx.fillStyle = isMain ? '#4A2800' : '#555555';
     ctx.beginPath();
     ctx.arc(0, 6, 12, Math.PI, 0);
     ctx.fill();
-    
-    // Eyes
     ctx.fillStyle = '#000000';
     ctx.fillRect(3, 10, 4, 4);
-    
-    // Legs
     ctx.fillStyle = isMain ? '#2D5A87' : '#666666';
     const legOffset = Math.sin(frame * Math.PI / 2) * 3;
     ctx.fillRect(-10, 50, 10, 8 + legOffset);
@@ -442,11 +482,10 @@ export const Overworld = () => {
     
     ctx.restore();
     
-    // Name
     ctx.fillStyle = isMain ? '#FFD700' : '#ffffff';
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3;
-    ctx.font = 'bold 12px sans-serif';
+    ctx.lineWidth = 2;
+    ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.strokeText(name, x + 20, y - 8);
     ctx.fillText(name, x + 20, y - 8);
@@ -477,11 +516,6 @@ export const Overworld = () => {
     
     // Platforms
     mapData.platforms.forEach(platform => {
-      if (platform.type === 'building') {
-        drawBuilding(ctx, platform);
-        return;
-      }
-      
       if (platform.type === 'ground') {
         ctx.fillStyle = '#8B4513';
         ctx.fillRect(platform.x, platform.y + 10, platform.width, platform.height - 10);
@@ -492,21 +526,13 @@ export const Overworld = () => {
         ctx.fillRect(platform.x, platform.y + 6, platform.width, platform.height - 6);
         ctx.fillStyle = '#228B22';
         ctx.fillRect(platform.x, platform.y, platform.width, 10);
-        ctx.strokeStyle = '#1a5a1a';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
       } else if (platform.type === 'stone') {
         ctx.fillStyle = '#708090';
         ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-        ctx.fillStyle = '#5a6a7a';
-        ctx.fillRect(platform.x, platform.y + platform.height - 6, platform.width, 6);
-        ctx.strokeStyle = '#4a5a6a';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
       }
     });
     
-    // Exit indicators
+    // Exits
     mapData.exits.forEach(exit => {
       ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
       ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
@@ -516,22 +542,26 @@ export const Overworld = () => {
       ctx.fillText(exit.label, exit.x + exit.width / 2, exit.y - 5);
     });
     
-    // Other players (clickable)
+    // NPCs
+    if (mapData.npcs) {
+      mapData.npcs.forEach(npc => drawNPC(ctx, npc));
+    }
+    
+    // Other players (same map only)
     Object.values(otherPlayers).forEach(other => {
-      drawPlayer(ctx, other.x, other.y, other.facing || 'right', 0, other.name, false);
+      if (other.current_map === currentMap) {
+        drawPlayer(ctx, other.x, other.y, other.facing || 'right', 0, other.name, false);
+      }
     });
     
     // Player
     drawPlayer(ctx, playerState.x, playerState.y, playerState.facing, playerState.frame, player?.name || 'Player', true);
     
-  }, [playerState, otherPlayers, player, mapData]);
+  }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction]);
 
-  // Player sprite for HUD
   const PlayerHUDSprite = () => (
-    <svg viewBox="0 0 64 64" width={48} height={48}>
+    <svg viewBox="0 0 64 64" width={40} height={40}>
       <rect x="24" y="36" width="16" height="20" fill="#4a90d9"/>
-      <rect x="18" y="40" width="8" height="14" fill="#5aa0e9"/>
-      <rect x="38" y="40" width="8" height="14" fill="#5aa0e9"/>
       <circle cx="32" cy="24" r="12" fill="#ffd9b3"/>
       <path d="M20 20 Q32 8 44 20 L44 24 Q32 20 20 24 Z" fill="#4a2800"/>
       <circle cx="28" cy="24" r="2" fill="#000"/>
@@ -543,60 +573,62 @@ export const Overworld = () => {
     <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-900 relative" data-testid="overworld">
       {/* HUD */}
       <div className="absolute top-4 left-4 z-10">
-        <div className="bg-slate-900/90 border-2 border-amber-400 rounded-xl p-3 shadow-lg min-w-[200px]">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center border-2 border-white shadow-lg overflow-hidden">
+        <div className="bg-slate-900/90 border-2 border-amber-400 rounded-xl p-3 shadow-lg w-48">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center border-2 border-white">
               <PlayerHUDSprite />
             </div>
             <div>
-              <div className="text-amber-400 font-bold">{player?.name || 'Player'}</div>
-              <div className="text-slate-400 text-sm">Level {player?.level || 1}</div>
+              <div className="text-amber-400 font-bold text-sm">{player?.name}</div>
+              <div className="text-slate-400 text-xs">Lv{player?.level} | {player?.gold || 0}G</div>
             </div>
           </div>
           
-          {/* HP */}
-          <div className="mb-1">
-            <div className="flex justify-between text-xs mb-0.5">
-              <span className="text-red-400 font-bold">HP</span>
-              <span className="text-slate-300">{player?.hp || 100}/{player?.max_hp || 100}</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              <span className="text-red-400 text-[10px] w-4">HP</span>
+              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-red-500" style={{ width: `${player ? (player.hp / player.max_hp) * 100 : 100}%` }} />
+              </div>
+              <span className="text-[10px] text-slate-300 w-12 text-right">{player?.hp}/{player?.max_hp}</span>
             </div>
-            <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-red-500 to-pink-400" style={{ width: `${player ? (player.hp / player.max_hp) * 100 : 100}%` }} />
+            <div className="flex items-center gap-1">
+              <span className="text-cyan-400 text-[10px] w-4">MP</span>
+              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-cyan-500" style={{ width: `${player ? (player.mp / player.max_mp) * 100 : 100}%` }} />
+              </div>
+              <span className="text-[10px] text-slate-300 w-12 text-right">{player?.mp}/{player?.max_mp}</span>
             </div>
-          </div>
-          
-          {/* MP */}
-          <div className="mb-1">
-            <div className="flex justify-between text-xs mb-0.5">
-              <span className="text-cyan-400 font-bold">MP</span>
-              <span className="text-slate-300">{player?.mp || 50}/{player?.max_mp || 50}</span>
-            </div>
-            <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-400" style={{ width: `${player ? (player.mp / player.max_mp) * 100 : 100}%` }} />
-            </div>
-          </div>
-          
-          {/* XP */}
-          <div>
-            <div className="flex justify-between text-xs mb-0.5">
-              <span className="text-amber-400 font-bold">XP</span>
-              <span className="text-slate-300">{player?.xp || 0}/{player?.xp_to_next || 100}</span>
-            </div>
-            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-400" style={{ width: `${player ? (player.xp / player.xp_to_next) * 100 : 0}%` }} />
+            <div className="flex items-center gap-1">
+              <span className="text-amber-400 text-[10px] w-4">XP</span>
+              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-500" style={{ width: `${player ? (player.xp / player.xp_to_next) * 100 : 0}%` }} />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Map name */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 px-4 py-2 rounded-lg border border-slate-600">
-        <span className="text-white font-bold">{mapData.name}</span>
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 px-4 py-1 rounded-lg border border-slate-600">
+        <span className="text-white font-bold text-sm">{mapData.name}</span>
       </div>
 
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <div className="absolute top-16 right-4 space-y-2 z-20">
+          {notifications.map((n, i) => (
+            <div key={i} className="bg-amber-500/90 text-black px-3 py-2 rounded-lg text-sm flex justify-between items-center gap-2">
+              <span>{n.from_name} wants to {n.type.replace('_', ' ')}</span>
+              <button onClick={() => clearNotification(i)} className="text-black/60 hover:text-black">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Controls */}
-      <div className="absolute bottom-4 right-4 bg-slate-900/80 border border-slate-600 rounded-lg px-4 py-2 text-slate-300 text-sm">
-        <span className="text-amber-400">WASD</span>: Move/Jump | <span className="text-amber-400">M</span>: Menu | <span className="text-amber-400">Enter</span>: Chat
+      <div className="absolute top-4 right-4 bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-1 text-slate-300 text-xs">
+        <span className="text-amber-400">WASD</span>: Move | <span className="text-amber-400">M</span>: Menu
       </div>
 
       {/* Canvas */}
@@ -609,77 +641,133 @@ export const Overworld = () => {
         data-testid="game-canvas"
       />
 
-      {/* Chat Box */}
-      <div className={`absolute bottom-20 left-4 w-80 transition-all ${showChat ? 'opacity-100' : 'opacity-70'}`}>
+      {/* Chat */}
+      <div className="absolute bottom-4 left-4 w-72">
         <div className="bg-slate-900/90 border border-slate-600 rounded-lg overflow-hidden">
-          <div className="bg-slate-800 px-3 py-1 text-sm text-slate-300 flex justify-between">
+          <div className="bg-slate-800 px-2 py-1 text-xs text-slate-300 flex justify-between">
             <span>💬 Chat</span>
-            <button onClick={() => setShowChat(!showChat)} className="text-slate-400 hover:text-white">
-              {showChat ? '▼' : '▲'}
-            </button>
           </div>
-          {showChat && (
-            <>
-              <div className="h-32 overflow-y-auto p-2 text-sm">
-                {chatMessages.length === 0 ? (
-                  <div className="text-slate-500 text-center">No messages yet</div>
-                ) : (
-                  chatMessages.map((msg, idx) => (
-                    <div key={idx} className="mb-1">
-                      <span className="text-amber-400 font-bold">{msg.sender}:</span>
-                      <span className="text-white ml-1">{msg.message}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="flex border-t border-slate-700">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                  className="flex-1 bg-slate-800 px-3 py-2 text-white text-sm focus:outline-none"
-                  placeholder="Type message..."
-                />
-                <button onClick={sendChat} className="px-3 bg-cyan-600 text-white text-sm hover:bg-cyan-500">
-                  Send
-                </button>
-              </div>
-            </>
-          )}
+          <div className="h-24 overflow-y-auto p-1 text-xs">
+            {chatMessages.length === 0 ? (
+              <div className="text-slate-500 text-center py-2">No messages</div>
+            ) : (
+              chatMessages.slice(-20).map((msg, idx) => (
+                <div key={idx} className="mb-0.5">
+                  <span className="text-amber-400 font-bold">{msg.sender_name}:</span>
+                  <span className="text-white ml-1">{msg.message}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="flex border-t border-slate-700">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              className="flex-1 bg-slate-800 px-2 py-1 text-white text-xs focus:outline-none"
+              placeholder="Type message, Enter to send..."
+            />
+          </div>
         </div>
       </div>
 
-      {/* Player Interaction Menu */}
-      {showPlayerMenu && selectedPlayer && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border-2 border-amber-400 rounded-xl p-4 z-20 min-w-[200px]">
-          <div className="text-amber-400 font-bold text-center mb-3">{selectedPlayer.name}</div>
-          <div className="space-y-2">
-            <button 
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-lg text-sm"
-              onClick={() => { setChatMessages(prev => [...prev, { sender: 'System', message: `Friend request sent to ${selectedPlayer.name}!`, time: Date.now() }]); setShowPlayerMenu(false); }}
-            >
+      {/* Player Menu */}
+      {showEntityMenu && selectedEntity?.type === 'player' && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border-2 border-amber-400 rounded-xl p-4 z-20 min-w-[180px]">
+          <div className="text-amber-400 font-bold text-center mb-2">{selectedEntity.name}</div>
+          <div className="space-y-1">
+            <button className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-1.5 rounded text-sm"
+              onClick={() => { sendMultiplayerRequest('friend_request', selectedEntity.id); setShowEntityMenu(false); }}>
               👋 Add Friend
             </button>
-            <button 
-              className="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg text-sm"
-              onClick={() => { setChatMessages(prev => [...prev, { sender: 'System', message: `Duel request sent to ${selectedPlayer.name}!`, time: Date.now() }]); setShowPlayerMenu(false); }}
-            >
-              ⚔️ Request Duel
+            <button className="w-full bg-red-600 hover:bg-red-500 text-white py-1.5 rounded text-sm"
+              onClick={() => { sendMultiplayerRequest('duel_request', selectedEntity.id); setShowEntityMenu(false); }}>
+              ⚔️ Duel
             </button>
-            <button 
-              className="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg text-sm"
-              onClick={() => { setChatMessages(prev => [...prev, { sender: 'System', message: `Trade request sent to ${selectedPlayer.name}!`, time: Date.now() }]); setShowPlayerMenu(false); }}
-            >
+            <button className="w-full bg-green-600 hover:bg-green-500 text-white py-1.5 rounded text-sm"
+              onClick={() => { sendMultiplayerRequest('trade_request', selectedEntity.id); setShowEntityMenu(false); }}>
               🔄 Trade
             </button>
-            <button 
-              className="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg text-sm"
-              onClick={() => setShowPlayerMenu(false)}
-            >
+            <button className="w-full bg-slate-700 hover:bg-slate-600 text-white py-1.5 rounded text-sm"
+              onClick={() => setShowEntityMenu(false)}>
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* NPC Dialog */}
+      {npcDialog && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border-2 border-amber-400 rounded-xl p-4 z-20 min-w-[280px] max-w-sm">
+          <div className="text-amber-400 font-bold text-center mb-2">{npcDialog.npc.name}</div>
+          <p className="text-slate-300 text-sm mb-3">{npcDialog.data?.npc?.dialogue || 'Hello, adventurer!'}</p>
+          
+          {npcDialog.data?.type === 'healer' && (
+            <div className="text-green-400 text-sm text-center mb-3">Your party has been healed!</div>
+          )}
+          
+          {npcDialog.data?.type === 'quest_giver' && npcDialog.quests && (
+            <div className="space-y-1 mb-3 max-h-48 overflow-y-auto">
+              {npcDialog.quests.active?.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-cyan-400 text-[10px] font-bold mb-1">ACTIVE QUESTS:</div>
+                  {npcDialog.quests.active.map(q => (
+                    <div key={q.id} className="bg-cyan-900/30 border border-cyan-500/30 rounded px-2 py-1 text-xs text-slate-300 mb-1">
+                      <div className="font-bold text-cyan-300">{q.name}</div>
+                      <div>{q.description}</div>
+                      <div className="text-amber-400 mt-0.5">Progress: {q.progress}/{q.required_count}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {npcDialog.quests.available?.length > 0 && (
+                <div>
+                  <div className="text-amber-400 text-[10px] font-bold mb-1">AVAILABLE QUESTS:</div>
+                  {npcDialog.quests.available.map(q => (
+                    <button key={q.id} className="w-full bg-slate-800 hover:bg-slate-700 rounded px-2 py-1 text-xs text-left mb-1"
+                      onClick={async () => {
+                        await acceptQuest(q.id);
+                        const newQuests = await fetchQuests();
+                        setNpcDialog(prev => ({ ...prev, quests: newQuests, questMsg: `Accepted: ${q.name}!` }));
+                      }}>
+                      <div className="text-white font-bold">{q.name}</div>
+                      <div className="text-slate-400">{q.description}</div>
+                      <div className="text-amber-400 mt-0.5">Reward: {q.reward_gold}G + {q.reward_xp}XP</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {npcDialog.questMsg && <div className="text-green-400 text-xs text-center mt-1">{npcDialog.questMsg}</div>}
+              {(!npcDialog.quests.available?.length && !npcDialog.quests.active?.length) && (
+                <div className="text-slate-500 text-xs text-center">No quests available right now.</div>
+              )}
+            </div>
+          )}
+          
+          {npcDialog.data?.type === 'shop' && npcDialog.data?.npc?.shop_items && (
+            <div className="space-y-1 mb-3">
+              {npcDialog.data.npc.shop_items.map((item, i) => (
+                <button key={i} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-1 px-2 rounded text-sm flex justify-between"
+                  onClick={async () => {
+                    const result = await buyFromNpc(npcDialog.npc.id, i);
+                    if (result.success) {
+                      setNpcDialog(prev => ({ ...prev, buyMsg: result.message }));
+                    } else {
+                      setNpcDialog(prev => ({ ...prev, buyMsg: result.error || 'Not enough gold!' }));
+                    }
+                  }}>
+                  <span>{item.name}</span>
+                  <span className="text-amber-400">{item.price}G</span>
+                </button>
+              ))}
+              {npcDialog.buyMsg && <div className="text-amber-300 text-xs text-center mt-1">{npcDialog.buyMsg}</div>}
+            </div>
+          )}
+          
+          <button className="w-full bg-slate-700 hover:bg-slate-600 text-white py-1.5 rounded text-sm"
+            onClick={() => setNpcDialog(null)}>
+            Close [E]
+          </button>
         </div>
       )}
     </div>

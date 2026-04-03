@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useGame } from '../contexts/GameContext';
 
-// Calculate turn order based on agility
-const calculateTurnOrder = (party, enemies, turns = 12) => {
+// Calculate turn order - regenerates when needed
+const calculateTurnOrder = (party, enemies, startFrom = 0, turns = 15) => {
   const allCombatants = [
     ...party.map(p => ({ ...p, isEnemy: false })),
     ...enemies.map(e => ({ ...e, isEnemy: true }))
   ].filter(c => c.current_hp > 0);
+
+  if (allCombatants.length === 0) return [];
 
   const timeline = [];
   const turnCounters = {};
   
   allCombatants.forEach(c => {
     const id = c.isEnemy ? c.encounter_id : (c.type === 'player' ? 'player' : `ally_${c.id}`);
-    turnCounters[id] = 0;
+    turnCounters[id] = startFrom;
   });
 
   while (timeline.length < turns) {
@@ -25,7 +27,7 @@ const calculateTurnOrder = (party, enemies, turns = 12) => {
       if (c.current_hp <= 0) return;
       const id = c.isEnemy ? c.encounter_id : (c.type === 'player' ? 'player' : `ally_${c.id}`);
       const agility = c.isEnemy ? c.base_agility : c.agility;
-      const waitTime = turnCounters[id] + (100 / (agility + 1));
+      const waitTime = turnCounters[id] + (100 / Math.max(1, agility));
       
       if (waitTime < lowestWait) {
         lowestWait = waitTime;
@@ -45,7 +47,7 @@ const calculateTurnOrder = (party, enemies, turns = 12) => {
   return timeline;
 };
 
-// Sprite SVG components for monsters
+// Monster SVG sprites
 const MonsterSprite = ({ type, size = 64 }) => {
   const sprites = {
     slime: (
@@ -62,8 +64,6 @@ const MonsterSprite = ({ type, size = 64 }) => {
     goblin: (
       <svg viewBox="0 0 64 64" width={size} height={size}>
         <rect x="24" y="40" width="16" height="20" fill="#2d5a27"/>
-        <rect x="20" y="50" width="8" height="12" fill="#3d7a37"/>
-        <rect x="36" y="50" width="8" height="12" fill="#3d7a37"/>
         <circle cx="32" cy="28" r="16" fill="#7cb342"/>
         <polygon points="16,20 24,32 16,32" fill="#7cb342"/>
         <polygon points="48,20 40,32 48,32" fill="#7cb342"/>
@@ -71,7 +71,6 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <ellipse cx="38" cy="26" rx="4" ry="5" fill="#ff0"/>
         <circle cx="26" cy="27" r="2" fill="#000"/>
         <circle cx="38" cy="27" r="2" fill="#000"/>
-        <path d="M26 36 Q32 40 38 36" stroke="#000" strokeWidth="2" fill="none"/>
       </svg>
     ),
     wolf: (
@@ -85,8 +84,6 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <polygon points="28,10 24,24 18,20" fill="#888"/>
         <circle cx="16" cy="22" r="3" fill="#ff0"/>
         <circle cx="24" cy="22" r="3" fill="#ff0"/>
-        <circle cx="16" cy="22" r="1.5" fill="#000"/>
-        <circle cx="24" cy="22" r="1.5" fill="#000"/>
         <ellipse cx="20" cy="30" rx="4" ry="3" fill="#333"/>
       </svg>
     ),
@@ -96,9 +93,6 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <ellipse cx="32" cy="32" rx="10" ry="12" fill="#553388"/>
         <circle cx="28" cy="28" r="3" fill="#ff0"/>
         <circle cx="36" cy="28" r="3" fill="#ff0"/>
-        <circle cx="28" cy="28" r="1.5" fill="#f00"/>
-        <circle cx="36" cy="28" r="1.5" fill="#f00"/>
-        <polygon points="30,36 32,42 34,36" fill="#fff"/>
       </svg>
     ),
     skeleton: (
@@ -110,10 +104,6 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <ellipse cx="26" cy="22" rx="4" ry="5" fill="#000"/>
         <ellipse cx="38" cy="22" rx="4" ry="5" fill="#000"/>
         <rect x="26" y="32" width="12" height="2" fill="#000"/>
-        <rect x="28" y="30" width="2" height="6" fill="#000"/>
-        <rect x="34" y="30" width="2" height="6" fill="#000"/>
-        <rect x="16" y="38" width="12" height="4" fill="#ddd"/>
-        <rect x="36" y="38" width="12" height="4" fill="#ddd"/>
       </svg>
     ),
     mushroom: (
@@ -122,11 +112,8 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <ellipse cx="32" cy="32" rx="22" ry="16" fill="#ff6b6b"/>
         <circle cx="24" cy="28" r="5" fill="#fff"/>
         <circle cx="40" cy="30" r="4" fill="#fff"/>
-        <circle cx="32" cy="22" r="3" fill="#fff"/>
         <ellipse cx="26" cy="38" rx="3" ry="4" fill="#000"/>
         <ellipse cx="38" cy="38" rx="3" ry="4" fill="#000"/>
-        <ellipse cx="27" cy="37" rx="1" ry="1" fill="#fff"/>
-        <ellipse cx="39" cy="37" rx="1" ry="1" fill="#fff"/>
       </svg>
     ),
     ghost: (
@@ -134,8 +121,6 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <path d="M16 32 Q16 12 32 12 Q48 12 48 32 L48 56 L42 50 L36 56 L32 50 L28 56 L22 50 L16 56 Z" fill="rgba(200,200,255,0.8)"/>
         <ellipse cx="26" cy="28" rx="5" ry="6" fill="#000"/>
         <ellipse cx="38" cy="28" rx="5" ry="6" fill="#000"/>
-        <ellipse cx="27" cy="27" rx="2" ry="2" fill="#fff"/>
-        <ellipse cx="39" cy="27" rx="2" ry="2" fill="#fff"/>
         <ellipse cx="32" cy="40" rx="4" ry="6" fill="#446"/>
       </svg>
     ),
@@ -144,19 +129,58 @@ const MonsterSprite = ({ type, size = 64 }) => {
         <rect x="20" y="32" width="24" height="28" fill="#8b7355" rx="4"/>
         <rect x="12" y="36" width="10" height="20" fill="#9b8365" rx="3"/>
         <rect x="42" y="36" width="10" height="20" fill="#9b8365" rx="3"/>
-        <rect x="22" y="52" width="8" height="12" fill="#7b6345"/>
-        <rect x="34" y="52" width="8" height="12" fill="#7b6345"/>
         <rect x="18" y="12" width="28" height="24" fill="#a89375" rx="4"/>
         <rect x="22" y="18" width="8" height="6" fill="#ff6"/>
         <rect x="34" y="18" width="8" height="6" fill="#ff6"/>
-        <rect x="24" cy="32" width="16" height="4" fill="#666"/>
+      </svg>
+    ),
+    spider: (
+      <svg viewBox="0 0 64 64" width={size} height={size}>
+        <ellipse cx="32" cy="40" rx="16" ry="12" fill="#333"/>
+        <ellipse cx="32" cy="28" rx="10" ry="10" fill="#444"/>
+        <circle cx="28" cy="26" r="3" fill="#f00"/>
+        <circle cx="36" cy="26" r="3" fill="#f00"/>
+        <line x1="16" y1="36" x2="4" y2="28" stroke="#333" strokeWidth="3"/>
+        <line x1="48" y1="36" x2="60" y2="28" stroke="#333" strokeWidth="3"/>
+        <line x1="18" y1="44" x2="6" y2="52" stroke="#333" strokeWidth="3"/>
+        <line x1="46" y1="44" x2="58" y2="52" stroke="#333" strokeWidth="3"/>
+      </svg>
+    ),
+    harpy: (
+      <svg viewBox="0 0 64 64" width={size} height={size}>
+        <path d="M8 30 Q20 20 28 35 L32 32 L36 35 Q44 20 56 30 Q50 42 40 44 L32 50 L24 44 Q14 42 8 30" fill="#9966cc"/>
+        <circle cx="32" cy="24" r="10" fill="#ffd9b3"/>
+        <circle cx="29" cy="22" r="2" fill="#000"/>
+        <circle cx="35" cy="22" r="2" fill="#000"/>
+        <path d="M28 28 Q32 32 36 28" stroke="#c96" strokeWidth="2" fill="none"/>
+      </svg>
+    ),
+    dragon: (
+      <svg viewBox="0 0 64 64" width={size} height={size}>
+        <ellipse cx="32" cy="48" rx="20" ry="12" fill="#8b0000"/>
+        <ellipse cx="32" cy="36" rx="18" ry="16" fill="#b22222"/>
+        <circle cx="26" cy="20" r="12" fill="#cd5c5c"/>
+        <polygon points="20,8 26,20 14,16" fill="#cd5c5c"/>
+        <polygon points="32,8 26,20 38,16" fill="#cd5c5c"/>
+        <circle cx="22" cy="18" r="3" fill="#ff0"/>
+        <circle cx="30" cy="18" r="3" fill="#ff0"/>
+        <path d="M18 26 L22 30 L26 26" fill="#ff6600"/>
+      </svg>
+    ),
+    phoenix: (
+      <svg viewBox="0 0 64 64" width={size} height={size}>
+        <path d="M10 35 Q25 15 32 30 Q39 15 54 35 Q45 45 32 40 Q19 45 10 35" fill="#ff6600"/>
+        <ellipse cx="32" cy="42" rx="12" ry="14" fill="#ff8c00"/>
+        <circle cx="32" cy="28" r="8" fill="#ffd700"/>
+        <circle cx="29" cy="26" r="2" fill="#000"/>
+        <circle cx="35" cy="26" r="2" fill="#000"/>
+        <polygon points="32,32 28,38 36,38" fill="#ff4500"/>
       </svg>
     )
   };
   return sprites[type] || sprites.slime;
 };
 
-// Player sprite
 const PlayerSprite = ({ size = 64 }) => (
   <svg viewBox="0 0 64 64" width={size} height={size}>
     <rect x="24" y="36" width="16" height="20" fill="#4a90d9"/>
@@ -168,7 +192,6 @@ const PlayerSprite = ({ size = 64 }) => (
     <path d="M20 20 Q32 8 44 20 L44 24 Q32 20 20 24 Z" fill="#4a2800"/>
     <circle cx="28" cy="24" r="2" fill="#000"/>
     <circle cx="36" cy="24" r="2" fill="#000"/>
-    <path d="M28 30 Q32 34 36 30" stroke="#c96" strokeWidth="2" fill="none"/>
   </svg>
 );
 
@@ -177,8 +200,9 @@ export const CombatScreen = () => {
   
   const [partyState, setPartyState] = useState([]);
   const [enemyState, setEnemyState] = useState([]);
-  const [currentTurn, setCurrentTurn] = useState(0);
+  const [turnIndex, setTurnIndex] = useState(0);
   const [turnTimeline, setTurnTimeline] = useState([]);
+  const [timelineOffset, setTimelineOffset] = useState(0);
   const [selectedMenu, setSelectedMenu] = useState('main');
   const [selectedAction, setSelectedAction] = useState(null);
   const [combatLog, setCombatLog] = useState([]);
@@ -190,37 +214,44 @@ export const CombatScreen = () => {
   const [captureName, setCaptureName] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [battleStarted, setBattleStarted] = useState(false);
+  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
   
-  const turnProcessedRef = useRef(new Set());
+  const processedTurnsRef = useRef(new Set());
 
   // Initialize combat
   useEffect(() => {
     if (combatData && !battleStarted) {
-      setPartyState(combatData.party);
+      setPartyState(combatData.party.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp })));
       setEnemyState(combatData.enemies);
-      setCombatLog([`Wild ${combatData.enemies.map(e => e.name).join(', ')} appeared!`]);
-      setCurrentTurn(0);
+      setCombatLog([`Encountered ${combatData.enemies.map(e => e.name).join(', ')}!`]);
+      setTurnIndex(0);
+      setTimelineOffset(0);
       setBattleStarted(true);
-      turnProcessedRef.current = new Set();
+      processedTurnsRef.current = new Set();
+      setDefeatedMonsters([]);
       setIsProcessing(false);
     }
   }, [combatData, battleStarted]);
 
-  // Calculate turn timeline
+  // Recalculate timeline when needed
   useEffect(() => {
-    if (partyState.length && enemyState.length && battleStarted) {
-      const timeline = calculateTurnOrder(partyState, enemyState);
-      setTurnTimeline(timeline);
+    if (!battleStarted) return;
+    
+    const aliveParty = partyState.filter(p => p.current_hp > 0);
+    const aliveEnemies = enemyState.filter(e => e.current_hp > 0);
+    
+    if (aliveParty.length > 0 && aliveEnemies.length > 0) {
+      const newTimeline = calculateTurnOrder(aliveParty, aliveEnemies, timelineOffset, 15);
+      setTurnTimeline(newTimeline);
     }
-  }, [partyState, enemyState, battleStarted]);
+  }, [partyState, enemyState, timelineOffset, battleStarted]);
 
   // Get current actor
   const currentActor = useMemo(() => {
-    if (!turnTimeline.length || currentTurn >= turnTimeline.length) return null;
-    return turnTimeline[currentTurn];
-  }, [turnTimeline, currentTurn]);
+    if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
+    return turnTimeline[turnIndex];
+  }, [turnTimeline, turnIndex]);
 
-  // Check if it's player's turn
   const isPlayerTurn = useMemo(() => {
     return currentActor && !currentActor.isEnemy && !isProcessing;
   }, [currentActor, isProcessing]);
@@ -229,16 +260,16 @@ export const CombatScreen = () => {
   useEffect(() => {
     if (!battleStarted) return;
     
-    const partyAlive = partyState.some(p => p.current_hp > 0);
-    const enemiesAlive = enemyState.some(e => e.current_hp > 0);
+    const aliveParty = partyState.filter(p => p.current_hp > 0);
+    const aliveEnemies = enemyState.filter(e => e.current_hp > 0);
 
-    if (!partyAlive && partyState.length > 0) {
+    if (aliveParty.length === 0) {
       setCombatLog(prev => [...prev, 'Party defeated...']);
       setTimeout(() => {
         setGameState('overworld');
         setCombatData(null);
       }, 2000);
-    } else if (!enemiesAlive && enemyState.length > 0 && !showVictory) {
+    } else if (aliveEnemies.length === 0 && !showVictory) {
       handleVictory();
     }
   }, [partyState, enemyState, battleStarted, showVictory]);
@@ -247,7 +278,7 @@ export const CombatScreen = () => {
     setShowVictory(true);
     const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
     const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
-    const result = await processVictory(totalXP, finalParty);
+    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
     setVictoryData({ ...result, totalXP });
   };
 
@@ -265,11 +296,20 @@ export const CombatScreen = () => {
   }, []);
 
   const advanceTurn = useCallback(() => {
-    setCurrentTurn(prev => prev + 1);
+    const nextIndex = turnIndex + 1;
+    
+    // If we're running low on timeline, regenerate
+    if (nextIndex >= turnTimeline.length - 2) {
+      setTimelineOffset(prev => prev + 100);
+      setTurnIndex(0);
+    } else {
+      setTurnIndex(nextIndex);
+    }
+    
     setIsProcessing(false);
     setSelectedMenu('main');
     setSelectedAction(null);
-  }, []);
+  }, [turnIndex, turnTimeline.length]);
 
   // Handle player action
   const handleAction = async (action, target) => {
@@ -280,12 +320,19 @@ export const CombatScreen = () => {
     
     if (action === 'attack') {
       const { damage, isCrit } = executeAttack(actor, target);
+      const newHp = Math.max(0, target.current_hp - damage);
+      
       setEnemyState(prev => prev.map(e => 
         e.encounter_id === target.encounter_id 
-          ? { ...e, current_hp: Math.max(0, e.current_hp - damage) }
+          ? { ...e, current_hp: newHp }
           : e
       ));
-      addDamageNumber(500, 200, damage, isCrit ? 'critical' : 'damage');
+      
+      if (newHp <= 0) {
+        setDefeatedMonsters(prev => [...prev, target.id]);
+      }
+      
+      addDamageNumber(450, 200, damage, isCrit ? 'critical' : 'damage');
       setCombatLog(prev => [...prev, `${actor.name} attacks ${target.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
       setTimeout(() => advanceTurn(), 600);
     } 
@@ -307,10 +354,7 @@ export const CombatScreen = () => {
       }
       
       setPartyState(prev => prev.map(p => {
-        if (actor.type === 'player' && p.type === 'player') {
-          return { ...p, current_mp: Math.max(0, p.current_mp - ability.mp_cost) };
-        }
-        if (actor.id && p.id === actor.id) {
+        if ((actor.type === 'player' && p.type === 'player') || (actor.id && p.id === actor.id)) {
           return { ...p, current_mp: Math.max(0, p.current_mp - ability.mp_cost) };
         }
         return p;
@@ -322,30 +366,38 @@ export const CombatScreen = () => {
           setPartyState(prev => prev.map(p => ({
             ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount)
           })));
-          setCombatLog(prev => [...prev, `${actor.name} heals everyone for ${healAmount} HP!`]);
+          addDamageNumber(700, 250, healAmount, 'heal');
+          setCombatLog(prev => [...prev, `${actor.name} heals everyone for ${healAmount}!`]);
         } else {
           setPartyState(prev => prev.map(p => 
             (target.type === 'player' ? p.type === 'player' : p.id === target.id)
               ? { ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) }
               : p
           ));
-          setCombatLog(prev => [...prev, `${actor.name} heals ${target.name} for ${healAmount} HP!`]);
+          addDamageNumber(700, 250, healAmount, 'heal');
+          setCombatLog(prev => [...prev, `${actor.name} heals ${target.name} for ${healAmount}!`]);
         }
-        addDamageNumber(700, 250, healAmount, 'heal');
       } else {
         const { damage } = executeAttack(actor, target, ability.damage_multiplier);
+        const newHp = Math.max(0, target.current_hp - damage);
+        
         setEnemyState(prev => prev.map(e => 
           e.encounter_id === target.encounter_id 
-            ? { ...e, current_hp: Math.max(0, e.current_hp - damage) }
+            ? { ...e, current_hp: newHp }
             : e
         ));
-        addDamageNumber(500, 200, damage, 'damage');
+        
+        if (newHp <= 0) {
+          setDefeatedMonsters(prev => [...prev, target.id]);
+        }
+        
+        addDamageNumber(450, 200, damage, 'damage');
         setCombatLog(prev => [...prev, `${actor.name} uses ${ability.name} for ${damage}!`]);
       }
       setTimeout(() => advanceTurn(), 600);
     }
     else if (action === 'flee') {
-      setCombatLog(prev => [...prev, `${actor.name} flees from battle!`]);
+      setCombatLog(prev => [...prev, `${actor.name} flees!`]);
       setTimeout(() => {
         setGameState('overworld');
         setCombatData(null);
@@ -353,18 +405,17 @@ export const CombatScreen = () => {
     }
   };
 
-  // Enemy AI - fixed to properly execute
+  // Enemy AI
   useEffect(() => {
-    if (!battleStarted || showVictory || !currentActor || !currentActor.isEnemy) return;
-    if (isProcessing) return;
+    if (!battleStarted || showVictory || !currentActor || !currentActor.isEnemy || isProcessing) return;
     
-    const turnKey = `turn-${currentTurn}`;
-    if (turnProcessedRef.current.has(turnKey)) return;
+    const turnKey = `${turnIndex}-${timelineOffset}`;
+    if (processedTurnsRef.current.has(turnKey)) return;
     
-    turnProcessedRef.current.add(turnKey);
+    processedTurnsRef.current.add(turnKey);
     setIsProcessing(true);
     
-    const executeEnemy = () => {
+    const timer = setTimeout(() => {
       const aliveParty = partyState.filter(p => p.current_hp > 0);
       if (aliveParty.length === 0) {
         setIsProcessing(false);
@@ -378,10 +429,7 @@ export const CombatScreen = () => {
       const finalDamage = isCrit ? baseDamage * 2 : baseDamage;
       
       setPartyState(prev => prev.map(p => {
-        if (target.type === 'player' && p.type === 'player') {
-          return { ...p, current_hp: Math.max(0, p.current_hp - finalDamage) };
-        }
-        if (target.id && p.id === target.id) {
+        if ((target.type === 'player' && p.type === 'player') || (target.id && p.id === target.id)) {
           return { ...p, current_hp: Math.max(0, p.current_hp - finalDamage) };
         }
         return p;
@@ -390,20 +438,23 @@ export const CombatScreen = () => {
       addDamageNumber(700, 250, finalDamage, isCrit ? 'critical' : 'damage');
       setCombatLog(prev => [...prev, `${currentActor.name} attacks ${target.name} for ${finalDamage}!`]);
       
-      setTimeout(() => advanceTurn(), 800);
-    };
+      setTimeout(() => advanceTurn(), 700);
+    }, 800);
     
-    setTimeout(executeEnemy, 800);
-  }, [currentTurn, currentActor, battleStarted, showVictory, isProcessing, partyState, advanceTurn]);
+    return () => clearTimeout(timer);
+  }, [turnIndex, timelineOffset, currentActor, battleStarted, showVictory, isProcessing, partyState, advanceTurn]);
 
   const handleCapture = async () => {
     if (!captureTarget || !captureName.trim()) return;
     setIsProcessing(true);
     
     const result = await captureMonster(captureTarget.id, captureName.trim());
+    
     if (result.success) {
-      setCombatLog(prev => [...prev, result.message]);
+      setCombatLog(prev => [...prev, `Captured ${captureName}!`]);
+      // Remove from enemy list
       setEnemyState(prev => prev.filter(e => e.encounter_id !== captureTarget.encounter_id));
+      setDefeatedMonsters(prev => [...prev, captureTarget.id]);
     } else {
       setCombatLog(prev => [...prev, result.message || 'Capture failed!']);
     }
@@ -423,26 +474,25 @@ export const CombatScreen = () => {
 
   return (
     <div className="w-full h-screen flex bg-gradient-to-b from-indigo-950 via-purple-950 to-slate-950" data-testid="combat-screen">
-      {/* Left Panel - Turn Order */}
-      <div className="w-24 bg-slate-900/80 border-r-2 border-slate-700 p-2 flex flex-col" data-testid="ctb-timeline">
-        <div className="text-amber-400 text-xs font-bold mb-2 text-center">TURNS</div>
-        <div className="flex-1 flex flex-col gap-1 overflow-y-auto">
-          {turnTimeline.slice(currentTurn, currentTurn + 10).map((turn, idx) => (
+      {/* Turn Order - Left Panel */}
+      <div className="w-20 bg-slate-900/90 border-r-2 border-slate-700 p-1 flex flex-col" data-testid="ctb-timeline">
+        <div className="text-amber-400 text-[10px] font-bold mb-1 text-center">TURNS</div>
+        <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
+          {turnTimeline.slice(turnIndex, turnIndex + 12).map((turn, idx) => (
             <div 
               key={`${turn.turnId}-${idx}`}
-              className={`w-full aspect-square rounded-lg flex items-center justify-center border-2 transition-all
+              className={`w-full h-12 rounded flex items-center justify-center border transition-all
                 ${idx === 0 
-                  ? 'border-amber-400 bg-amber-400/20 shadow-lg shadow-amber-400/30' 
+                  ? 'border-amber-400 bg-amber-400/20 scale-105' 
                   : turn.isEnemy 
-                    ? 'border-red-500/50 bg-red-900/30' 
-                    : 'border-cyan-400/50 bg-cyan-900/30'
+                    ? 'border-red-500/40 bg-red-900/20' 
+                    : 'border-cyan-400/40 bg-cyan-900/20'
                 }`}
-              title={turn.name}
             >
-              <div className="w-10 h-10">
+              <div className="w-8 h-8">
                 {turn.isEnemy 
-                  ? <MonsterSprite type={turn.sprite} size={40} />
-                  : <PlayerSprite size={40} />
+                  ? <MonsterSprite type={turn.sprite} size={32} />
+                  : <PlayerSprite size={32} />
                 }
               </div>
             </div>
@@ -450,77 +500,55 @@ export const CombatScreen = () => {
         </div>
       </div>
 
-      {/* Main Battle Area */}
+      {/* Main Area */}
       <div className="flex-1 flex flex-col">
-        {/* Turn Indicator */}
-        <div className="h-12 flex items-center justify-center bg-slate-900/50">
+        {/* Turn Banner */}
+        <div className="h-10 flex items-center justify-center bg-slate-900/50">
           {currentActor && (
-            <div className={`px-6 py-2 rounded-full text-sm font-bold ${
-              isPlayerTurn 
-                ? 'bg-cyan-500/80 text-white animate-pulse' 
-                : 'bg-red-500/80 text-white'
+            <div className={`px-4 py-1 rounded-full text-sm font-bold ${
+              isPlayerTurn ? 'bg-cyan-500/80 text-white animate-pulse' : 'bg-red-500/80 text-white'
             }`}>
-              {isPlayerTurn ? `${currentActor.name}'s Turn - Choose Action!` : `${currentActor.name}'s Turn`}
+              {isPlayerTurn ? `${currentActor.name} - Choose Action!` : `${currentActor.name}'s Turn`}
             </div>
           )}
         </div>
 
         {/* Battle Field */}
-        <div className="flex-1 flex items-center justify-around px-8 relative">
+        <div className="flex-1 flex items-center justify-around px-6 relative">
           {/* Enemies */}
-          <div className="flex flex-col gap-6">
-            {enemyState.map((enemy, idx) => (
-              <div 
-                key={enemy.encounter_id}
-                className={`relative transition-all duration-300 ${enemy.current_hp <= 0 ? 'opacity-30 scale-90' : ''}`}
-                data-testid={`enemy-${idx}`}
-              >
-                <div className="w-24 h-24 flex items-center justify-center bg-slate-800/50 rounded-xl border-2 border-slate-600">
-                  <MonsterSprite type={enemy.sprite} size={72} />
+          <div className="flex flex-col gap-4">
+            {enemyState.filter(e => e.current_hp > 0).map((enemy, idx) => (
+              <div key={enemy.encounter_id} className="relative" data-testid={`enemy-${idx}`}>
+                <div className="w-20 h-20 flex items-center justify-center bg-slate-800/50 rounded-xl border-2 border-slate-600">
+                  <MonsterSprite type={enemy.sprite} size={60} />
                 </div>
-                <div className="text-center mt-2">
-                  <div className="text-white font-bold text-sm">{enemy.name}</div>
-                  <div className="w-24 h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
-                    <div 
-                      className="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all"
-                      style={{ width: `${(enemy.current_hp / enemy.base_hp) * 100}%` }}
-                    />
+                <div className="text-center mt-1">
+                  <div className="text-white font-bold text-xs">{enemy.name}</div>
+                  <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-red-500" style={{ width: `${(enemy.current_hp / enemy.base_hp) * 100}%` }} />
                   </div>
-                  <div className="text-xs text-slate-400">{enemy.current_hp}/{enemy.base_hp}</div>
+                  <div className="text-[10px] text-slate-400">{enemy.current_hp}/{enemy.base_hp}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* VS */}
-          <div className="text-4xl font-black text-amber-400/40">VS</div>
+          <div className="text-3xl font-black text-amber-400/30">VS</div>
 
           {/* Party */}
-          <div className="flex flex-col gap-4">
-            {partyState.map((member, idx) => {
+          <div className="flex flex-col gap-3">
+            {partyState.filter(p => p.current_hp > 0).map((member, idx) => {
               const isActive = currentActor && !currentActor.isEnemy && 
                 ((currentActor.type === 'player' && member.type === 'player') || currentActor.id === member.id);
               
               return (
-                <div 
-                  key={member.type === 'player' ? 'player' : member.id}
-                  className={`relative transition-all duration-300 ${member.current_hp <= 0 ? 'opacity-30 scale-90' : ''} ${isActive ? 'scale-110' : ''}`}
-                  data-testid={`party-member-${idx}`}
-                >
-                  {isActive && (
-                    <div className="absolute -left-8 top-1/2 -translate-y-1/2 text-xl animate-bounce">▶</div>
-                  )}
-                  <div 
-                    className={`w-20 h-24 flex items-center justify-center bg-slate-800/50 rounded-xl border-2 ${isActive ? 'border-amber-400 shadow-lg shadow-amber-400/30' : 'border-slate-600'}`}
-                  >
-                    {member.type === 'player' 
-                      ? <PlayerSprite size={56} />
-                      : <MonsterSprite type={member.sprite} size={56} />
-                    }
+                <div key={member.type === 'player' ? 'player' : member.id} className={`relative ${isActive ? 'scale-110' : ''}`}>
+                  {isActive && <div className="absolute -left-6 top-1/2 -translate-y-1/2 text-lg animate-bounce">▶</div>}
+                  <div className={`w-16 h-20 flex items-center justify-center bg-slate-800/50 rounded-xl border-2 ${isActive ? 'border-amber-400' : 'border-slate-600'}`}>
+                    {member.type === 'player' ? <PlayerSprite size={48} /> : <MonsterSprite type={member.sprite} size={48} />}
                   </div>
-                  <div className="text-center mt-1">
-                    <div className="text-cyan-300 font-bold text-xs">{member.name}</div>
-                    <div className="text-slate-500 text-xs">LV{member.level}</div>
+                  <div className="text-center mt-0.5">
+                    <div className="text-cyan-300 font-bold text-[10px]">{member.name}</div>
                   </div>
                 </div>
               );
@@ -529,225 +557,167 @@ export const CombatScreen = () => {
 
           {/* Damage Numbers */}
           {damageNumbers.map(d => (
-            <div 
-              key={d.id}
-              className={`absolute text-2xl font-black pointer-events-none animate-bounce
-                ${d.type === 'heal' ? 'text-green-400' : d.type === 'critical' ? 'text-amber-400' : 'text-red-400'}`}
-              style={{ left: d.x, top: d.y }}
-            >
+            <div key={d.id} className={`absolute text-xl font-black pointer-events-none animate-bounce
+              ${d.type === 'heal' ? 'text-green-400' : d.type === 'critical' ? 'text-amber-400' : 'text-red-400'}`}
+              style={{ left: d.x, top: d.y }}>
               {d.type === 'heal' ? '+' : '-'}{d.value}
             </div>
           ))}
         </div>
 
         {/* Bottom UI */}
-        <div className="h-48 flex gap-2 p-3 bg-slate-900/80 border-t-2 border-slate-700">
-          {/* Command Menu */}
-          <div className="w-56 bg-slate-800/80 rounded-xl overflow-hidden border border-slate-600" data-testid="command-menu">
-            <div className="bg-indigo-600 px-3 py-2 text-white text-sm font-bold">
-              {isPlayerTurn ? `⚔️ ${currentActor?.name}` : '⏳ Waiting...'}
+        <div className="h-44 flex gap-2 p-2 bg-slate-900/80 border-t-2 border-slate-700">
+          {/* Commands */}
+          <div className="w-48 bg-slate-800/80 rounded-lg overflow-hidden border border-slate-600">
+            <div className="bg-indigo-600 px-2 py-1 text-white text-xs font-bold">
+              {isPlayerTurn ? `⚔️ ${currentActor?.name}` : '⏳ Wait...'}
             </div>
-            
-            <div className="p-2 max-h-36 overflow-y-auto">
+            <div className="p-1 max-h-32 overflow-y-auto">
               {isPlayerTurn && selectedMenu === 'main' && (
-                <div className="space-y-1">
-                  {[
-                    { id: 'attack', label: '⚔️ Attack', action: () => setSelectedMenu('target-attack') },
-                    { id: 'abilities', label: '✨ Abilities', action: () => setSelectedMenu('abilities') },
-                    { id: 'capture', label: '🎯 Capture', action: () => setSelectedMenu('target-capture') },
-                    { id: 'flee', label: '🏃 Flee', action: () => handleAction('flee') },
-                  ].map(cmd => (
-                    <button 
-                      key={cmd.id}
-                      className="w-full text-left px-3 py-2 rounded text-white hover:bg-white/10 transition"
-                      onClick={cmd.action}
-                      data-testid={`${cmd.id}-button`}
-                    >
-                      {cmd.label}
-                    </button>
-                  ))}
+                <div className="space-y-0.5">
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                    onClick={() => setSelectedMenu('target-attack')} data-testid="attack-button">⚔️ Attack</button>
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                    onClick={() => setSelectedMenu('abilities')} data-testid="abilities-button">✨ Abilities</button>
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                    onClick={() => setSelectedMenu('target-capture')} data-testid="capture-button">🎯 Capture</button>
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                    onClick={() => handleAction('flee')} data-testid="flee-button">🏃 Flee</button>
                 </div>
               )}
 
               {isPlayerTurn && selectedMenu === 'abilities' && (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {abilities.unlocked.length === 0 ? (
-                    <div className="text-slate-400 text-sm px-3 py-2">No abilities</div>
-                  ) : (
-                    abilities.unlocked.map(ability => {
-                      const canUse = (currentActor?.current_mp || 0) >= ability.mp_cost;
-                      return (
-                        <button 
-                          key={ability.id}
-                          className={`w-full text-left px-3 py-2 rounded transition ${canUse ? 'text-white hover:bg-white/10' : 'text-slate-500'}`}
-                          onClick={() => {
-                            if (!canUse) return;
-                            setSelectedAction({ type: 'ability', ability });
-                            setSelectedMenu(ability.ability_type === 'heal' ? 'target-ally' : 'target-enemy');
-                          }}
-                          disabled={!canUse}
-                        >
-                          ✨ {ability.name} <span className="text-cyan-400 text-xs">({ability.mp_cost}MP)</span>
-                        </button>
-                      );
-                    })
-                  )}
-                  <button className="w-full text-left px-3 py-2 rounded text-slate-400 hover:bg-white/10" onClick={() => setSelectedMenu('main')}>
-                    ← Back
-                  </button>
+                    <div className="text-slate-400 text-xs px-2 py-1">No abilities</div>
+                  ) : abilities.unlocked.map(ability => (
+                    <button key={ability.id}
+                      className={`w-full text-left px-2 py-1 rounded text-xs ${(currentActor?.current_mp || 0) >= ability.mp_cost ? 'text-white hover:bg-white/10' : 'text-slate-500'}`}
+                      onClick={() => {
+                        if ((currentActor?.current_mp || 0) < ability.mp_cost) return;
+                        setSelectedAction({ type: 'ability', ability });
+                        setSelectedMenu(ability.ability_type === 'heal' ? 'target-ally' : 'target-enemy');
+                      }}>
+                      ✨ {ability.name} ({ability.mp_cost}MP)
+                    </button>
+                  ))}
+                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" onClick={() => setSelectedMenu('main')}>← Back</button>
                 </div>
               )}
 
               {isPlayerTurn && (selectedMenu === 'target-attack' || selectedMenu === 'target-enemy') && (
-                <div className="space-y-1">
-                  <div className="text-red-400 text-xs px-3 py-1">Select Target:</div>
-                  {enemyState.filter(e => e.current_hp > 0).map((enemy, idx) => (
-                    <button 
-                      key={enemy.encounter_id}
-                      className="w-full text-left px-3 py-2 rounded text-white hover:bg-red-500/20"
-                      onClick={() => handleAction(selectedAction || 'attack', enemy)}
-                      data-testid={`target-enemy-${idx}`}
-                    >
-                      {enemy.name} ({enemy.current_hp}HP)
+                <div className="space-y-0.5">
+                  <div className="text-red-400 text-[10px] px-2">Target:</div>
+                  {enemyState.filter(e => e.current_hp > 0).map((e, i) => (
+                    <button key={e.encounter_id} className="w-full text-left px-2 py-1 rounded text-white text-xs hover:bg-red-500/20"
+                      onClick={() => handleAction(selectedAction || 'attack', e)} data-testid={`target-enemy-${i}`}>
+                      {e.name} ({e.current_hp}HP)
                     </button>
                   ))}
-                  <button className="w-full text-left px-3 py-2 rounded text-slate-400 hover:bg-white/10" onClick={() => { setSelectedMenu('main'); setSelectedAction(null); }}>
-                    ← Back
-                  </button>
+                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" 
+                    onClick={() => { setSelectedMenu('main'); setSelectedAction(null); }}>← Back</button>
                 </div>
               )}
 
               {isPlayerTurn && selectedMenu === 'target-capture' && (
-                <div className="space-y-1">
-                  <div className="text-green-400 text-xs px-3 py-1">Capture (HP &lt;50%):</div>
+                <div className="space-y-0.5">
+                  <div className="text-green-400 text-[10px] px-2">Capture (HP&lt;50%):</div>
                   {enemyState.filter(e => e.current_hp > 0 && e.current_hp < e.base_hp * 0.5).length === 0 ? (
-                    <div className="text-slate-400 text-sm px-3 py-2">Weaken enemies first!</div>
-                  ) : (
-                    enemyState.filter(e => e.current_hp > 0 && e.current_hp < e.base_hp * 0.5).map(enemy => (
-                      <button 
-                        key={enemy.encounter_id}
-                        className="w-full text-left px-3 py-2 rounded text-white hover:bg-green-500/20"
-                        onClick={() => handleAction('capture', enemy)}
-                      >
-                        {enemy.name} ({Math.floor(enemy.capture_rate * 100)}%)
-                      </button>
-                    ))
-                  )}
-                  <button className="w-full text-left px-3 py-2 rounded text-slate-400 hover:bg-white/10" onClick={() => setSelectedMenu('main')}>
-                    ← Back
-                  </button>
+                    <div className="text-slate-400 text-xs px-2">Weaken enemies!</div>
+                  ) : enemyState.filter(e => e.current_hp > 0 && e.current_hp < e.base_hp * 0.5).map(e => (
+                    <button key={e.encounter_id} className="w-full text-left px-2 py-1 rounded text-white text-xs hover:bg-green-500/20"
+                      onClick={() => handleAction('capture', e)}>
+                      {e.name} ({Math.floor(e.capture_rate * 100)}%)
+                    </button>
+                  ))}
+                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" onClick={() => setSelectedMenu('main')}>← Back</button>
                 </div>
               )}
 
               {isPlayerTurn && selectedMenu === 'target-ally' && (
-                <div className="space-y-1">
-                  <div className="text-cyan-400 text-xs px-3 py-1">Select Ally:</div>
-                  {partyState.filter(p => p.current_hp > 0).map((member, idx) => (
-                    <button 
-                      key={member.type === 'player' ? 'player' : member.id}
-                      className="w-full text-left px-3 py-2 rounded text-white hover:bg-cyan-500/20"
-                      onClick={() => handleAction(selectedAction, member)}
-                    >
-                      {member.name} ({member.current_hp}/{member.max_hp}HP)
+                <div className="space-y-0.5">
+                  <div className="text-cyan-400 text-[10px] px-2">Heal:</div>
+                  {partyState.filter(p => p.current_hp > 0).map((m, i) => (
+                    <button key={m.type === 'player' ? 'p' : m.id} className="w-full text-left px-2 py-1 rounded text-white text-xs hover:bg-cyan-500/20"
+                      onClick={() => handleAction(selectedAction, m)} data-testid={`target-ally-${i}`}>
+                      {m.name} ({m.current_hp}/{m.max_hp})
                     </button>
                   ))}
-                  <button className="w-full text-left px-3 py-2 rounded text-slate-400 hover:bg-white/10" onClick={() => { setSelectedMenu('main'); setSelectedAction(null); }}>
-                    ← Back
-                  </button>
+                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" 
+                    onClick={() => { setSelectedMenu('main'); setSelectedAction(null); }}>← Back</button>
                 </div>
               )}
             </div>
           </div>
 
           {/* Party Status */}
-          <div className="flex-1 bg-slate-800/80 rounded-xl overflow-hidden border border-slate-600" data-testid="party-status">
-            <div className="bg-cyan-600 px-3 py-2 text-white text-sm font-bold">🛡️ Party</div>
-            <div className="p-3 grid grid-cols-2 gap-3">
-              {partyState.map(member => (
-                <div key={member.type === 'player' ? 'player' : member.id} className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8">
-                      {member.type === 'player' ? <PlayerSprite size={32} /> : <MonsterSprite type={member.sprite} size={32} />}
-                    </div>
-                    <span className="text-white font-bold text-sm">{member.name}</span>
-                    <span className="text-slate-400 text-xs">LV{member.level}</span>
+          <div className="flex-1 bg-slate-800/80 rounded-lg overflow-hidden border border-slate-600">
+            <div className="bg-cyan-600 px-2 py-1 text-white text-xs font-bold">🛡️ Party</div>
+            <div className="p-2 grid grid-cols-2 gap-2">
+              {partyState.map(m => (
+                <div key={m.type === 'player' ? 'p' : m.id} className="space-y-0.5">
+                  <div className="flex items-center gap-1">
+                    <div className="w-6 h-6">{m.type === 'player' ? <PlayerSprite size={24} /> : <MonsterSprite type={m.sprite} size={24} />}</div>
+                    <span className="text-white font-bold text-xs">{m.name}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-red-400 text-xs w-6">HP</span>
-                    <div className="flex-1 h-3 bg-slate-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-red-500 to-pink-500" style={{ width: `${(member.current_hp / member.max_hp) * 100}%` }} />
+                    <span className="text-red-400 text-[10px] w-4">HP</span>
+                    <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+                      <div className="h-full bg-red-500" style={{ width: `${(m.current_hp / m.max_hp) * 100}%` }} />
                     </div>
-                    <span className="text-xs text-slate-300 w-14 text-right">{member.current_hp}/{member.max_hp}</span>
+                    <span className="text-[10px] text-slate-300 w-12 text-right">{m.current_hp}/{m.max_hp}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-cyan-400 text-xs w-6">MP</span>
-                    <div className="flex-1 h-3 bg-slate-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500" style={{ width: `${(member.current_mp / member.max_mp) * 100}%` }} />
+                    <span className="text-cyan-400 text-[10px] w-4">MP</span>
+                    <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+                      <div className="h-full bg-cyan-500" style={{ width: `${(m.current_mp / m.max_mp) * 100}%` }} />
                     </div>
-                    <span className="text-xs text-slate-300 w-14 text-right">{member.current_mp}/{member.max_mp}</span>
+                    <span className="text-[10px] text-slate-300 w-12 text-right">{m.current_mp}/{m.max_mp}</span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Combat Log */}
-          <div className="w-56 bg-slate-800/80 rounded-xl overflow-hidden border border-slate-600" data-testid="combat-log">
-            <div className="bg-amber-600 px-3 py-2 text-white text-sm font-bold">📜 Log</div>
-            <div className="p-2 h-32 overflow-y-auto">
-              {combatLog.slice(-8).map((log, idx) => (
-                <div key={idx} className="text-slate-300 text-xs py-0.5 border-b border-slate-700/50">{log}</div>
+          {/* Log */}
+          <div className="w-48 bg-slate-800/80 rounded-lg overflow-hidden border border-slate-600">
+            <div className="bg-amber-600 px-2 py-1 text-white text-xs font-bold">📜 Log</div>
+            <div className="p-1 h-28 overflow-y-auto">
+              {combatLog.slice(-10).map((log, i) => (
+                <div key={i} className="text-slate-300 text-[10px] py-0.5 border-b border-slate-700/30">{log}</div>
               ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Victory Modal */}
+      {/* Victory */}
       {showVictory && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" data-testid="victory-modal">
-          <div className="bg-gradient-to-b from-amber-900 to-amber-950 border-4 border-amber-400 rounded-2xl p-8 max-w-md">
-            <h2 className="text-4xl font-black text-amber-400 text-center mb-4">VICTORY!</h2>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-gradient-to-b from-amber-900 to-amber-950 border-4 border-amber-400 rounded-2xl p-6 max-w-sm">
+            <h2 className="text-3xl font-black text-amber-400 text-center mb-4">VICTORY!</h2>
             {victoryData && (
-              <div className="space-y-2 text-center mb-6">
-                <div className="text-white text-xl">XP: <span className="text-amber-400 font-bold">{victoryData.totalXP}</span></div>
-                {victoryData.level_ups > 0 && (
-                  <div className="text-green-400 font-bold animate-pulse">LEVEL UP! Now Level {victoryData.new_level}</div>
-                )}
+              <div className="space-y-2 text-center mb-4">
+                <div className="text-white">XP: <span className="text-amber-400 font-bold">{victoryData.totalXP}</span></div>
+                {victoryData.level_ups > 0 && <div className="text-green-400 font-bold animate-pulse">LEVEL UP! Lv{victoryData.new_level}</div>}
               </div>
             )}
-            <button 
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold py-3 rounded-xl hover:from-amber-400 hover:to-orange-400"
-              onClick={handleContinue}
-              data-testid="continue-button"
-            >
-              Continue
-            </button>
+            <button className="w-full bg-amber-500 text-white font-bold py-2 rounded-lg hover:bg-amber-400" onClick={handleContinue} data-testid="continue-button">Continue</button>
           </div>
         </div>
       )}
 
       {/* Capture Modal */}
       {showCapture && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" data-testid="capture-modal">
-          <div className="bg-gradient-to-b from-green-900 to-green-950 border-4 border-green-400 rounded-2xl p-6 max-w-sm">
-            <h2 className="text-xl font-bold text-green-400 mb-4">Capture {captureTarget?.name}?</h2>
-            <input
-              type="text"
-              value={captureName}
-              onChange={(e) => setCaptureName(e.target.value)}
-              className="w-full bg-slate-800 border-2 border-green-400 rounded-lg px-4 py-2 text-white mb-4"
-              placeholder="Name your ally..."
-              maxLength={20}
-              data-testid="capture-name-input"
-            />
-            <div className="flex gap-3">
-              <button className="flex-1 bg-green-500 text-white font-bold py-2 rounded-lg hover:bg-green-400" onClick={handleCapture} data-testid="confirm-capture-button">
-                Capture!
-              </button>
-              <button className="flex-1 bg-slate-700 text-white py-2 rounded-lg hover:bg-slate-600" onClick={() => { setShowCapture(false); setCaptureTarget(null); }} data-testid="cancel-capture-button">
-                Cancel
-              </button>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-gradient-to-b from-green-900 to-green-950 border-4 border-green-400 rounded-2xl p-4 max-w-xs">
+            <h2 className="text-lg font-bold text-green-400 mb-3">Capture {captureTarget?.name}?</h2>
+            <input type="text" value={captureName} onChange={(e) => setCaptureName(e.target.value)}
+              className="w-full bg-slate-800 border-2 border-green-400 rounded px-3 py-2 text-white mb-3 text-sm"
+              placeholder="Name..." maxLength={20} data-testid="capture-name-input" />
+            <div className="flex gap-2">
+              <button className="flex-1 bg-green-500 text-white font-bold py-1.5 rounded hover:bg-green-400 text-sm" onClick={handleCapture} data-testid="confirm-capture-button">Capture!</button>
+              <button className="flex-1 bg-slate-700 text-white py-1.5 rounded hover:bg-slate-600 text-sm" onClick={() => { setShowCapture(false); setCaptureTarget(null); }}>Cancel</button>
             </div>
           </div>
         </div>
