@@ -102,12 +102,12 @@ function App() {
               } 
             />
             <Route path="/" element={<Navigate to="/game" replace />} />
-            <Route path="*" element={<Navigate to="/game" replace />} />
+       <Route path="*" element={<Navigate to="/game" replace />} />
           </Routes>
-    </BrowserRouter>
+        </BrowserRouter>
       </AuthProvider>
       </div> {/* Closes scale wrapper */}
-    </div> {/* Closes App div */}
+    </div>
   );
 }
 
