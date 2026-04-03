@@ -285,7 +285,7 @@ export const CombatScreen = () => {
     const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
     const result = await processVictory(totalXP, finalParty, defeatedMonsters);
     setVictoryData({ ...result, totalXP });
-  }, [showVictory, enemyState, partyState, processVictory, defeatedMonsters, setVictoryData, setShowVictory]);
+  }, [enemyState, partyState, processVictory, defeatedMonsters, setVictoryData, setShowVictory]);
 
   const addDamageNumber = (x, y, value, type = 'damage') => {
     const id = Date.now() + Math.random();
