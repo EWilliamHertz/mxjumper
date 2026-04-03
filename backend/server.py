@@ -207,6 +207,28 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         ''')
+
+        # NEW: Guilds Table
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS guilds (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                leader_id INTEGER REFERENCES players(id),
+                bank_balance INTEGER DEFAULT 0,
+                total_tax_collected INTEGER DEFAULT 0,
+                claimed_zone VARCHAR(50),
+                active_buff VARCHAR(50),
+                buff_expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+
+        # Add guild_id and skill_points to players if not exists
+        try:
+            await conn.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS guild_id INTEGER REFERENCES guilds(id)')
+            await conn.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS skill_points INTEGER DEFAULT 0')
+        except:
+            pass
         
         # NPCs table
         await conn.execute('''
@@ -879,6 +901,7 @@ async def combat_victory(request: Request):
     body = await request.json()
     xp_gained = body.get('xp', 0)
     defeated_monsters = body.get('defeated_monsters', [])
+    current_map = body.get('current_map', 'forest')
     
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
@@ -886,9 +909,11 @@ async def combat_victory(request: Request):
         if not player:
             raise HTTPException(status_code=404, detail="Player not found")
         
+        # 1. Level up and SKILL POINTS
         new_xp = player['xp'] + xp_gained
         level_ups = 0
         stat_points_gained = 0
+        skill_points_gained = 0
         new_level = player['level']
         xp_to_next = player['xp_to_next']
         
@@ -897,18 +922,37 @@ async def combat_victory(request: Request):
             new_level += 1
             level_ups += 1
             stat_points_gained += 5
+            skill_points_gained += 1 # NEW: 1 Skill Point per level
             xp_to_next = int(xp_to_next * 1.5)
         
+        # 2. GUILD TAX LOGIC
+        base_gold_per_kill = 20
+        total_gold = len(defeated_monsters) * base_gold_per_kill
+        tax_paid = 0
+        
+        # Check if map is claimed
+        zone_owner = await conn.fetchrow('SELECT id, name FROM guilds WHERE claimed_zone = $1', current_map)
+        if zone_owner and player['guild_id'] != zone_owner['id']:
+            tax_paid = int(total_gold * 0.05) # 5% Intercepted
+            await conn.execute('''
+                UPDATE guilds SET bank_balance = bank_balance + $1, 
+                total_tax_collected = total_tax_collected + $1 WHERE id = $2
+            ''', tax_paid, zone_owner['id'])
+
+        gold_earned = total_gold - tax_paid
         hp_bonus = level_ups * 10
         mp_bonus = level_ups * 5
+
         await conn.execute('''
             UPDATE players SET 
                 xp = $1, level = $2, xp_to_next = $3, 
                 stat_points = stat_points + $4,
-                max_hp = max_hp + $5, hp = LEAST(hp + $5, max_hp + $5),
-                max_mp = max_mp + $6, mp = LEAST(mp + $6, max_mp + $6)
-            WHERE id = $7
-        ''', new_xp, new_level, xp_to_next, stat_points_gained, hp_bonus, mp_bonus, player['id'])
+                skill_points = skill_points + $5,
+                gold = gold + $6,
+                max_hp = max_hp + $7, hp = LEAST(hp + $7, max_hp + $7),
+                max_mp = max_mp + $8, mp = LEAST(mp + $8, max_mp + $8)
+            WHERE id = $9
+        ''', new_xp, new_level, xp_to_next, stat_points_gained, skill_points_gained, gold_earned, hp_bonus, mp_bonus, player['id'])
         
         # Update quest progress and bestiary for defeated monsters
         for monster_id in defeated_monsters:
@@ -1414,3 +1458,32 @@ if __name__ == "__main__":
     # Railway provides the port via an environment variable
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+@api_router.post("/guilds/create")
+async def create_guild(name: str, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, gold, guild_id FROM players WHERE user_id = $1', user['id'])
+        if player['guild_id']: raise HTTPException(status_code=400, detail="Already in a guild")
+        if player['gold'] < 10000: raise HTTPException(status_code=400, detail="Need 10,000G")
+        
+        guild_id = await conn.fetchval('INSERT INTO guilds (name, leader_id) VALUES ($1, $2) RETURNING id', name, player['id'])
+        await conn.execute('UPDATE players SET gold = gold - 10000, guild_id = $1 WHERE id = $2', guild_id, player['id'])
+        return {"success": True, "guild_id": guild_id}
+
+@api_router.post("/guilds/buy-buff")
+async def buy_guild_buff(buff_type: str, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, guild_id FROM players WHERE user_id = $1', user['id'])
+        guild = await conn.fetchrow('SELECT * FROM guilds WHERE id = $1 AND leader_id = $2', player['guild_id'], player['id'])
+        if not guild: raise HTTPException(status_code=403, detail="Only leaders can buy buffs")
+        
+        cost = 5000
+        if guild['bank_balance'] < cost: raise HTTPException(status_code=400, detail="Insufficient guild funds")
+        
+        expiry = datetime.now() + timedelta(hours=2)
+        await conn.execute('''
+            UPDATE guilds SET bank_balance = bank_balance - $1, 
+            active_buff = $2, buff_expires_at = $3 WHERE id = $4
+        ''', cost, buff_type, expiry, guild['id'])
+        return {"success": True, "expires_at": expiry}
