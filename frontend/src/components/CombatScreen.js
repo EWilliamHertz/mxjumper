@@ -242,19 +242,36 @@ const [battleStarted, setBattleStarted] = useState(false);
     }
   }, [combatData, battleStarted]);
 
-  // Recalculate timeline when needed
+  // Generate a STABLE timeline. Do not recalculate on HP changes!
   useEffect(() => {
-    if (!battleStarted) return;
+    if (!battleStarted || !combatData) return;
     
-    const aliveParty = partyState.filter(p => p.current_hp > 0);
-    const aliveEnemies = enemyState.filter(e => e.current_hp > 0);
+    const baseParty = combatData.party;
+    const baseEnemies = combatData.enemies;
     
-    if (aliveParty.length > 0 && aliveEnemies.length > 0) {
-      const newTimeline = calculateTurnOrder(aliveParty, aliveEnemies, timelineOffset, 15);
-      setTurnTimeline(newTimeline);
-    }
-  }, [partyState, enemyState, timelineOffset, battleStarted]);
+    const newTimeline = calculateTurnOrder(baseParty, baseEnemies, timelineOffset, 20);
+    setTurnTimeline(newTimeline);
+  }, [timelineOffset, battleStarted, combatData]);
 
+  // NEW: Auto-skip dead actors to prevent the queue from freezing
+  useEffect(() => {
+    if (!currentActor || !battleStarted || showVictory) return;
+    
+    let isDead = false;
+    if (currentActor.isEnemy) {
+      const e = enemyState.find(x => x.encounter_id === currentActor.encounter_id);
+      if (!e || e.current_hp <= 0) isDead = true;
+    } else {
+      const p = partyState.find(x => (currentActor.type === 'player' ? x.type === 'player' : x.id === currentActor.id));
+      if (!p || p.current_hp <= 0) isDead = true;
+    }
+
+    if (isDead) {
+      // Use a tiny timeout to safely step over the dead character
+      const timer = setTimeout(() => advanceTurn(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn]);
   // Get current actor
   const currentActor = useMemo(() => {
     if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;

@@ -169,7 +169,8 @@ export const Overworld = () => {
   // NEW: Day/Night and Inventory State
   const [gameTime, setGameTime] = useState(0); 
   const [showInventory, setShowInventory] = useState(false);
-
+const [showSkillTree, setShowSkillTree] = useState(false); // NEW
+  const [showGuildMenu, setShowGuildMenu] = useState(false); // NEW
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
 
@@ -181,10 +182,12 @@ export const Overworld = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // NEW: Keybinds for Inventory (Press 'I')
+  // NEW: Global Menu Keybinds
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key.toLowerCase() === 'i') setShowInventory(prev => !prev);
+      if (e.key.toLowerCase() === 'k') setShowSkillTree(prev => !prev);
+      if (e.key.toLowerCase() === 'g') setShowGuildMenu(prev => !prev);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -658,10 +661,75 @@ export const Overworld = () => {
         </div>
       </div>
 
-      {/* Map name */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 px-4 py-1 rounded-lg border border-slate-600 z-10">
-        <span className="text-white font-bold text-sm">{mapData.name}</span>
+      {/* Map name & Territory Control */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10 pointer-events-none">
+        <div className="bg-slate-900/90 px-6 py-1 rounded-lg border-2 border-slate-600 shadow-xl">
+          <span className="text-white font-black tracking-wider text-sm">{mapData.name}</span>
+        </div>
+        {/* Placeholder Guild Claim - Can be hooked to backend later */}
+        {currentMap === 'tundra' && (
+           <div className="bg-amber-900/90 px-4 py-0.5 rounded-b-lg border-b-2 border-x-2 border-amber-500 text-[10px] text-amber-400 font-bold tracking-widest mt-[-2px] shadow-lg animate-pulse">
+             🛡️ CLAIMED BY: APEX LEGION 🛡️
+           </div>
+        )}
       </div>
+
+      {/* NEW: Skill Tree Modal (Path of Exile Style) */}
+      {showSkillTree && (
+        <div className="absolute inset-8 bg-slate-950 border-4 border-amber-500 rounded-2xl z-50 p-6 flex flex-col shadow-[0_0_50px_rgba(245,158,11,0.2)]">
+           <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl text-amber-400 font-black uppercase tracking-widest">Skill Tree</h2>
+              <div className="text-white bg-slate-800 px-4 py-1 rounded-full font-bold">Unspent Points: <span className="text-amber-400 text-lg">{player?.skill_points || 3}</span></div>
+           </div>
+           <div className="flex-1 relative bg-slate-900 rounded-xl overflow-hidden border-2 border-slate-700 p-8">
+              {/* SVG lines connecting nodes */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                 <line x1="50%" y1="20%" x2="30%" y2="50%" stroke="#475569" strokeWidth="6" />
+                 <line x1="50%" y1="20%" x2="70%" y2="50%" stroke="#475569" strokeWidth="6" />
+                 <line x1="30%" y1="50%" x2="50%" y2="80%" stroke="#1e293b" strokeWidth="6" />
+              </svg>
+              {/* Core Node */}
+              <div className="absolute top-[20%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                 <button className="w-20 h-20 bg-gradient-to-br from-amber-600 to-amber-900 border-4 border-amber-400 rounded-full text-3xl shadow-[0_0_20px_rgba(245,158,11,0.6)] hover:scale-110 transition-all">⚔️</button>
+                 <span className="text-amber-400 text-xs mt-2 font-black tracking-wider bg-black/50 px-2 py-1 rounded">+5% CRIT</span>
+              </div>
+              {/* Branch Nodes */}
+              <div className="absolute top-[50%] left-[30%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                 <button className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">❤️</button>
+                 <span className="text-white text-[10px] mt-2 font-bold bg-black/50 px-2 py-1 rounded">+20 MAX HP</span>
+              </div>
+              <div className="absolute top-[50%] left-[70%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                 <button className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">🌪️</button>
+                 <span className="text-white text-[10px] mt-2 font-bold bg-black/50 px-2 py-1 rounded">CLEAVE (HIT 2)</span>
+              </div>
+              <div className="absolute top-[80%] left-[50%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                 <button className="w-16 h-16 bg-slate-900 border-4 border-slate-700 rounded-full text-xl opacity-50 cursor-not-allowed">🔒</button>
+                 <span className="text-slate-500 text-[10px] mt-2 font-bold">LOCKED</span>
+              </div>
+           </div>
+           <button onClick={() => setShowSkillTree(false)} className="mt-4 bg-slate-800 text-white font-bold py-3 rounded-lg hover:bg-slate-700 border border-slate-600 uppercase tracking-widest">Close Tree (K)</button>
+        </div>
+      )}
+
+      {/* NEW: Guilds Menu */}
+      {showGuildMenu && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-900 border-4 border-indigo-500 rounded-xl z-50 p-6 shadow-2xl flex flex-col">
+           <h2 className="text-2xl text-indigo-400 font-black uppercase mb-4 text-center tracking-widest">Guild Registry</h2>
+           <div className="space-y-4">
+              <div className="bg-slate-800 p-4 rounded-lg border border-slate-600 text-center">
+                 <div className="text-slate-400 text-xs mb-2">You are currently unguilded.</div>
+                 <button className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-500 shadow-lg">Form Guild (10,000G)</button>
+              </div>
+              <div className="bg-slate-800 p-4 rounded-lg border border-slate-600">
+                 <h3 className="text-amber-400 font-bold text-xs uppercase mb-2 border-b border-slate-600 pb-1">Territory Control</h3>
+                 <div className="flex justify-between text-xs text-white my-1"><span>Tundra:</span><span className="text-amber-400">Apex Legion</span></div>
+                 <div className="flex justify-between text-xs text-white my-1"><span>Lava Forge:</span><span className="text-slate-500">Unclaimed</span></div>
+                 <button className="w-full mt-3 bg-red-600 text-white font-bold py-1.5 rounded text-xs hover:bg-red-500 shadow-lg">Declare War on Zone</button>
+              </div>
+           </div>
+           <button onClick={() => setShowGuildMenu(false)} className="mt-4 text-slate-400 hover:text-white font-bold text-sm">Close (G)</button>
+        </div>
+      )}
 
       {/* NEW: Day/Night Visual Overlay */}
       <div className={`absolute inset-0 pointer-events-none transition-colors duration-1000 z-0
