@@ -189,42 +189,11 @@ export const Overworld = () => {
   const audioRef = useRef(new Audio());
   const [isMuted, setIsMuted] = useState(true);
 
-  // Background Music Mapping (Replace URLs with your own music files later)
-  const MAP_MUSIC = useMemo(() => ({
-    forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    village: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-    cave: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-    mountain: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
-    wasteland: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
-    tundra: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
-    sky_reach: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
-    sunken_citadel: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
-  }), []);
-
   const { 
     player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
     chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
-    interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest
-  } = useGame();
-  
-  const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
-
-  // Handle Music Switching
-  useEffect(() => {
-    const audio = audioRef.current;
-    audio.src = MAP_MUSIC[currentMap] || MAP_MUSIC.forest;
-    audio.loop = true;
-    audio.volume = 0.2; // Low background volume
-    if (!isMuted) {
-      audio.play().catch(e => console.log("Audio blocked by browser:", e));
-    }
-    return () => audio.pause();
-  }, [currentMap, isMuted, MAP_MUSIC]);
-
-  const { 
-    player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
-    chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
-    interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest
+    interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest,
+    spendSkillPoint // Import the new Skill Tree function
   } = useGame();
   
   const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
@@ -245,13 +214,42 @@ export const Overworld = () => {
   const [showEntityMenu, setShowEntityMenu] = useState(false);
   const [npcDialog, setNpcDialog] = useState(null);
   
-  // NEW: Day/Night and Inventory State
   const [gameTime, setGameTime] = useState(0); 
   const [showInventory, setShowInventory] = useState(false);
-const [showSkillTree, setShowSkillTree] = useState(false); // NEW
-  const [showGuildMenu, setShowGuildMenu] = useState(false); // NEW
-  const [duelSetup, setDuelSetup] = useState(null); // NEW: Tracks who you are challenging and the wager
+  const [showSkillTree, setShowSkillTree] = useState(false); 
+  const [showGuildMenu, setShowGuildMenu] = useState(false); 
+  const [duelSetup, setDuelSetup] = useState(null); 
+  
   const keysRef = useRef({});
+  const lastSaveRef = useRef(Date.now());
+
+  // Background Music Mapping
+  const MAP_MUSIC = useMemo(() => ({
+    forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    village: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    cave: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    mountain: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    wasteland: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
+    tundra: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
+    sky_reach: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+    sunken_citadel: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+    lava_forge: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+    mystic_grove: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3',
+  }), []);
+
+  // Handle Music Switching
+  useEffect(() => {
+    const audio = audioRef.current;
+    audio.src = MAP_MUSIC[currentMap] || MAP_MUSIC.forest;
+    audio.loop = true;
+    audio.volume = 0.2; 
+    if (!isMuted) {
+      audio.play().catch(e => console.log("Audio blocked by browser:", e));
+    } else {
+      audio.pause();
+    }
+    return () => audio.pause();
+  }, [currentMap, isMuted, MAP_MUSIC]);
   const lastSaveRef = useRef(Date.now());
 
   // NEW: Day/Night Cycle Timer (1 game day = 10 real minutes)
