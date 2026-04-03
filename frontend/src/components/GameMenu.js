@@ -139,8 +139,16 @@ export const GameMenu = () => {
               {/* Character Info */}
               <div>
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center text-4xl border-4 border-blue-300 shadow-xl">
-                    🦸
+                  <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center border-4 border-blue-300 shadow-xl overflow-hidden">
+                    <svg viewBox="0 0 64 64" width={60} height={60}>
+                      <rect x="24" y="36" width="16" height="20" fill="#4a90d9"/>
+                      <rect x="18" y="40" width="8" height="14" fill="#5aa0e9"/>
+                      <rect x="38" y="40" width="8" height="14" fill="#5aa0e9"/>
+                      <circle cx="32" cy="24" r="12" fill="#ffd9b3"/>
+                      <path d="M20 20 Q32 8 44 20 L44 24 Q32 20 20 24 Z" fill="#4a2800"/>
+                      <circle cx="28" cy="24" r="2" fill="#000"/>
+                      <circle cx="36" cy="24" r="2" fill="#000"/>
+                    </svg>
                   </div>
                   <div>
                     <h2 className="text-2xl font-black text-white">{player.name}</h2>
@@ -255,8 +263,16 @@ export const GameMenu = () => {
                 {player && (
                   <div className="bg-gradient-to-r from-blue-900/50 to-cyan-900/50 border-2 border-blue-500/50 rounded-xl p-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center text-3xl">
-                        🦸
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center overflow-hidden">
+                        <svg viewBox="0 0 64 64" width={48} height={48}>
+                          <rect x="24" y="36" width="16" height="20" fill="#4a90d9"/>
+                          <rect x="18" y="40" width="8" height="14" fill="#5aa0e9"/>
+                          <rect x="38" y="40" width="8" height="14" fill="#5aa0e9"/>
+                          <circle cx="32" cy="24" r="12" fill="#ffd9b3"/>
+                          <path d="M20 20 Q32 8 44 20 L44 24 Q32 20 20 24 Z" fill="#4a2800"/>
+                          <circle cx="28" cy="24" r="2" fill="#000"/>
+                          <circle cx="36" cy="24" r="2" fill="#000"/>
+                        </svg>
                       </div>
                       <div className="flex-1">
                         <div className="text-amber-400 font-bold text-lg">{player.name}</div>
@@ -274,8 +290,13 @@ export const GameMenu = () => {
                 {allies.filter(a => a.in_party).map(ally => (
                   <div key={ally.id} className="bg-slate-800/50 border border-slate-600 rounded-xl p-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-xl flex items-center justify-center text-3xl">
-                        🐾
+                      <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-xl flex items-center justify-center overflow-hidden">
+                        <svg viewBox="0 0 64 64" width={48} height={48}>
+                          <ellipse cx="32" cy="48" rx="24" ry="12" fill="#1a5a1a"/>
+                          <ellipse cx="32" cy="38" rx="22" ry="22" fill="#44dd44"/>
+                          <ellipse cx="26" cy="32" rx="4" ry="5" fill="#000"/>
+                          <ellipse cx="38" cy="32" rx="4" ry="5" fill="#000"/>
+                        </svg>
                       </div>
                       <div className="flex-1">
                         <div className="text-white font-bold">{ally.name}</div>
@@ -364,7 +385,10 @@ export const GameMenu = () => {
               
               {allies.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
-                  <div className="text-6xl mb-4">🎯</div>
+                  <svg viewBox="0 0 64 64" width={64} height={64} className="mx-auto mb-4 opacity-50">
+                    <circle cx="32" cy="32" r="28" fill="none" stroke="#666" strokeWidth="2" strokeDasharray="8 4"/>
+                    <text x="32" y="38" textAnchor="middle" fill="#666" fontSize="20">?</text>
+                  </svg>
                   <p className="text-lg">No allies captured yet</p>
                   <p className="text-sm">Weaken enemies in battle and use Capture!</p>
                 </div>
@@ -373,8 +397,13 @@ export const GameMenu = () => {
                   {allies.map(ally => (
                     <div key={ally.id} className="bg-slate-800/50 border border-slate-600 rounded-xl p-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-16 h-20 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center text-3xl">
-                          🐾
+                        <div className="w-16 h-20 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center overflow-hidden">
+                          <svg viewBox="0 0 64 64" width={48} height={48}>
+                            <ellipse cx="32" cy="48" rx="24" ry="12" fill="#1a5a1a"/>
+                            <ellipse cx="32" cy="38" rx="22" ry="22" fill="#44dd44"/>
+                            <ellipse cx="26" cy="32" rx="4" ry="5" fill="#000"/>
+                            <ellipse cx="38" cy="32" rx="4" ry="5" fill="#000"/>
+                          </svg>
                         </div>
                         <div className="flex-1">
                           <div className="text-white font-bold text-lg">{ally.name}</div>
