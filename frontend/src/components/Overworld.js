@@ -45,19 +45,28 @@ wasteland: {
     spawnY: 400,
     encounterZone: 'mountain',
   },
-  tundra: {
+ tundra: {
     name: 'Frozen Tundra',
     bgGradient: ['#e0f2fe', '#bae6fd', '#7dd3fc'],
     platforms: [
       { x: 0, y: 520, width: 1000, height: 80, type: 'snow' },
       { x: 300, y: 380, width: 400, height: 20, type: 'ice' },
     ],
-    decorations: [{ x: 150, y: 480, type: 'bush' }], // Using existing sprites for now
+    decorations: [{ x: 150, y: 480, type: 'bush' }],
     exits: [{ x: 0, y: 460, width: 50, height: 60, to: 'wasteland', label: '← Wasteland' }],
     spawnX: 80,
     spawnY: 450,
     encounterZone: 'tundra',
-  },decorations: [
+  },
+  cave: {
+    name: 'Crystal Cave',
+    bgGradient: ['#2d3748', '#1a202c', '#000000'],
+    platforms: [
+      { x: 0, y: 520, width: 1000, height: 80, type: 'stone' },
+      { x: 200, y: 400, width: 150, height: 24, type: 'stone' },
+      { x: 600, y: 300, width: 150, height: 24, type: 'stone' },
+    ],
+    decorations: [
       { x: 150, y: 100, type: 'stalactite' },
       { x: 350, y: 80, type: 'stalactite' },
       { x: 550, y: 120, type: 'stalactite' },
@@ -71,7 +80,7 @@ wasteland: {
     spawnY: 400,
     encounterZone: 'cave',
   },
-  mountain: {
+   mountain: {
     name: 'Rocky Mountain',
     bgGradient: ['#ffa07a', '#ffc0cb', '#dda0dd'],
     platforms: [
