@@ -172,7 +172,7 @@ export const Overworld = () => {
     if (player) {
       updatePosition(playerState.x, playerState.y, currentMap);
     }
-  }, [currentMap]);
+  }, [currentMap, player, playerState.x, playerState.y, updatePosition]);
 
   // Fetch NPCs when entering village
   useEffect(() => {
@@ -432,7 +432,7 @@ export const Overworld = () => {
     ctx.fill();
   };
 
-  const drawNPC = (ctx, npc) => {
+  const drawNPC = useCallback((ctx, npc) => {
     // Body
     ctx.fillStyle = npc.type === 'healer' ? '#ff69b4' : npc.type === 'shop' ? '#ffd700' : '#9370db';
     ctx.fillRect(npc.x - 12, npc.y - 30, 24, 30);
@@ -455,7 +455,7 @@ export const Overworld = () => {
       ctx.fillStyle = '#ffd700';
       ctx.fillText('[Click to talk]', npc.x, npc.y - 68);
     }
-  };
+  }, [checkNpcInteraction]);
 
   const drawPlayer = (ctx, x, y, facing, frame, name, isMain = true) => {
     const flip = facing === 'left' ? -1 : 1;
@@ -557,7 +557,7 @@ export const Overworld = () => {
     // Player
     drawPlayer(ctx, playerState.x, playerState.y, playerState.facing, playerState.frame, player?.name || 'Player', true);
     
-  }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction]);
+  }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction, drawNPC]);
 
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>

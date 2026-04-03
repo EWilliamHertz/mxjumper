@@ -277,15 +277,15 @@ export const CombatScreen = () => {
     } else if (aliveEnemies.length === 0 && !showVictory) {
       handleVictory();
     }
-  }, [partyState, enemyState, battleStarted, showVictory]);
+  }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
 
-  const handleVictory = async () => {
+  const handleVictory = useCallback(async () => {
     setShowVictory(true);
     const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
     const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
     const result = await processVictory(totalXP, finalParty, defeatedMonsters);
     setVictoryData({ ...result, totalXP });
-  };
+  }, [enemyState, partyState, processVictory, defeatedMonsters, setVictoryData, setShowVictory]);
 
   const addDamageNumber = (x, y, value, type = 'damage') => {
     const id = Date.now() + Math.random();
