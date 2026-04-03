@@ -172,7 +172,7 @@ export const Overworld = () => {
     if (player) {
       updatePosition(playerState.x, playerState.y, currentMap);
     }
-  }, [currentMap]);
+  }, [currentMap, player, playerState.x, playerState.y, updatePosition]);
 
   // Fetch NPCs when entering village
   useEffect(() => {
@@ -557,7 +557,7 @@ export const Overworld = () => {
     // Player
     drawPlayer(ctx, playerState.x, playerState.y, playerState.facing, playerState.frame, player?.name || 'Player', true);
     
-  }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction]);
+  }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction, drawNPC]);
 
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>
