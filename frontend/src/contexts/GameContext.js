@@ -174,8 +174,8 @@ export const GameProvider = ({ children }) => {
       await fetchPlayer();
       await fetchParty();
       await fetchAllies();
-      setGameState('overworld');
-      setCombatData(null);
+      // Remove setGameState and setCombatData from here. 
+      // The CombatScreen will handle this when you click "Continue".
       
       return victoryData.data;
     } catch (err) {

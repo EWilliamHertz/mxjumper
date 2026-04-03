@@ -280,12 +280,16 @@ export const CombatScreen = () => {
   }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
 
   const handleVictory = useCallback(async () => {
+    if (showVictory) return;
     setShowVictory(true);
+    
     const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
     const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
+    
+    // Pass the list of IDs for the backend to record in the bestiary
     const result = await processVictory(totalXP, finalParty, defeatedMonsters);
     setVictoryData({ ...result, totalXP });
-  }, [enemyState, partyState, processVictory, defeatedMonsters, setVictoryData, setShowVictory]);
+  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
 
   const addDamageNumber = (x, y, value, type = 'damage') => {
     const id = Date.now() + Math.random();
@@ -294,8 +298,12 @@ export const CombatScreen = () => {
   };
 
   const executeAttack = useCallback((attacker, target, multiplier = 1) => {
-    const str = attacker.isEnemy ? attacker.base_strength : attacker.strength;
-    const baseDamage = Math.floor(str * (1 + Math.random() * 0.5) * multiplier);
+    const str = attacker.isEnemy ? (attacker.base_strength || 10) : (attacker.strength || 10);
+    const def = target.isEnemy ? (target.base_vitality || 5) : (target.vitality || 5);
+    
+    // Formula: (Strength * Multiplier) - (Defense * 0.5)
+    const baseDamage = Math.max(1, Math.floor((str * (1 + Math.random() * 0.4) * multiplier) - (def * 0.5)));
+    
     const isCrit = Math.random() < 0.1;
     return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit };
   }, []);
