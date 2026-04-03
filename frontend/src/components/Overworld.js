@@ -711,23 +711,73 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
         </div>
       )}
 
-      {/* NEW: Guilds Menu */}
+      {/* NEW: Guilds Menu (Upgraded) */}
       {showGuildMenu && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-900 border-4 border-indigo-500 rounded-xl z-50 p-6 shadow-2xl flex flex-col">
-           <h2 className="text-2xl text-indigo-400 font-black uppercase mb-4 text-center tracking-widest">Guild Registry</h2>
-           <div className="space-y-4">
-              <div className="bg-slate-800 p-4 rounded-lg border border-slate-600 text-center">
-                 <div className="text-slate-400 text-xs mb-2">You are currently unguilded.</div>
-                 <button className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-500 shadow-lg">Form Guild (10,000G)</button>
-              </div>
-              <div className="bg-slate-800 p-4 rounded-lg border border-slate-600">
-                 <h3 className="text-amber-400 font-bold text-xs uppercase mb-2 border-b border-slate-600 pb-1">Territory Control</h3>
-                 <div className="flex justify-between text-xs text-white my-1"><span>Tundra:</span><span className="text-amber-400">Apex Legion</span></div>
-                 <div className="flex justify-between text-xs text-white my-1"><span>Lava Forge:</span><span className="text-slate-500">Unclaimed</span></div>
-                 <button className="w-full mt-3 bg-red-600 text-white font-bold py-1.5 rounded text-xs hover:bg-red-500 shadow-lg">Declare War on Zone</button>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[450px] bg-slate-950 border-4 border-indigo-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(99,102,241,0.3)] flex flex-col">
+           <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+              <h2 className="text-2xl text-indigo-400 font-black uppercase tracking-widest">Apex Legion</h2>
+              <div className="text-right">
+                <div className="text-white text-xs font-bold bg-slate-800 px-3 py-1 rounded">Bank: <span className="text-amber-400">14,250 G</span></div>
               </div>
            </div>
-           <button onClick={() => setShowGuildMenu(false)} className="mt-4 text-slate-400 hover:text-white font-bold text-sm">Close (G)</button>
+           
+           <div className="space-y-4">
+              {/* Tax Stats */}
+              <div className="bg-slate-900 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+                 <div>
+                   <div className="text-amber-400 font-bold text-xs uppercase tracking-wider">Passive Income</div>
+                   <div className="text-slate-400 text-[10px]">From 5% Tax on Claimed Zones</div>
+                 </div>
+                 <div className="text-right">
+                   <div className="text-green-400 font-black text-lg">+ 3,420 G</div>
+                   <div className="text-slate-500 text-[9px]">Total Generated This Week</div>
+                 </div>
+              </div>
+
+              {/* Guild Perks (Spending the Gold) */}
+              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
+                 <h3 className="text-indigo-400 font-bold text-xs uppercase mb-3">Guild Perks & Upgrades</h3>
+                 
+                 <div className="space-y-2">
+                   {/* Perk 1 */}
+                   <div className="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-600 hover:border-amber-400 transition-colors">
+                     <div className="flex items-center gap-3">
+                       <span className="text-2xl">⚡</span>
+                       <div>
+                         <div className="text-white font-bold text-xs">Expedition Buff</div>
+                         <div className="text-slate-400 text-[10px]">+10% XP for all members (2 hours)</div>
+                       </div>
+                     </div>
+                     <button className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-1 px-3 rounded text-[10px] shadow-lg">
+                       BUY (2,000G)
+                     </button>
+                   </div>
+
+                   {/* Perk 2 */}
+                   <div className="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-600 hover:border-amber-400 transition-colors">
+                     <div className="flex items-center gap-3">
+                       <span className="text-2xl">💰</span>
+                       <div>
+                         <div className="text-white font-bold text-xs">Tax Collector II</div>
+                         <div className="text-slate-400 text-[10px]">Increase Map Tax to 7%</div>
+                       </div>
+                     </div>
+                     <button className="bg-slate-700 text-slate-400 font-bold py-1 px-3 rounded text-[10px] cursor-not-allowed">
+                       LOCKED (10,000G)
+                     </button>
+                   </div>
+                 </div>
+              </div>
+
+              {/* Territory Control */}
+              <div className="bg-slate-900 p-3 rounded-lg border border-slate-700">
+                 <h3 className="text-amber-400 font-bold text-xs uppercase mb-2 border-b border-slate-700 pb-1">Territory Control</h3>
+                 <div className="flex justify-between text-xs text-white my-1"><span>Tundra:</span><span className="text-amber-400">Apex Legion</span></div>
+                 <div className="flex justify-between text-xs text-white my-1"><span>Lava Forge:</span><span className="text-slate-500">Unclaimed</span></div>
+              </div>
+           </div>
+           
+           <button onClick={() => setShowGuildMenu(false)} className="mt-4 bg-slate-800 text-white font-bold py-2 rounded-lg hover:bg-slate-700 border border-slate-600 uppercase tracking-widest text-xs">Close Registry (G)</button>
         </div>
       )}
 

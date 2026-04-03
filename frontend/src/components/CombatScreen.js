@@ -227,6 +227,36 @@ const [battleStarted, setBattleStarted] = useState(false);
   // Keep ref in sync with state
   useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
 
+  // Get current actor
+  const currentActor = useMemo(() => {
+    if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
+    return turnTimeline[turnIndex];
+  }, [turnTimeline, turnIndex]);
+
+  const isPlayerTurn = useMemo(() => {
+    return currentActor && !currentActor.isEnemy && !isProcessing;
+  }, [currentActor, isProcessing]);
+
+  const advanceTurn = useCallback(() => {
+    const current = turnIndexRef.current;
+    const nextIndex = current + 1;
+    
+    // If we're running low on timeline, regenerate
+    if (nextIndex >= turnTimeline.length - 2) {
+      processedTurnsRef.current = new Set();
+      setTimelineOffset(prev => prev + 100);
+      setTurnIndex(0);
+      turnIndexRef.current = 0;
+    } else {
+      setTurnIndex(nextIndex);
+      turnIndexRef.current = nextIndex;
+    }
+    
+    setIsProcessing(false);
+    setSelectedMenu('main');
+    setSelectedAction(null);
+  }, [turnTimeline.length]);
+
   // Initialize combat
   useEffect(() => {
     if (combatData && !battleStarted) {
@@ -272,15 +302,6 @@ const [battleStarted, setBattleStarted] = useState(false);
       return () => clearTimeout(timer);
     }
   }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn]);
-  // Get current actor
-  const currentActor = useMemo(() => {
-    if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
-    return turnTimeline[turnIndex];
-  }, [turnTimeline, turnIndex]);
-
-  const isPlayerTurn = useMemo(() => {
-    return currentActor && !currentActor.isEnemy && !isProcessing;
-  }, [currentActor, isProcessing]);
 
   const handleVictory = useCallback(async () => {
     if (showVictory) return;
@@ -328,26 +349,6 @@ const [battleStarted, setBattleStarted] = useState(false);
     const isCrit = Math.random() < 0.1;
     return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit };
   }, []);
-
-  const advanceTurn = useCallback(() => {
-    const current = turnIndexRef.current;
-    const nextIndex = current + 1;
-    
-    // If we're running low on timeline, regenerate
-    if (nextIndex >= turnTimeline.length - 2) {
-      processedTurnsRef.current = new Set();
-      setTimelineOffset(prev => prev + 100);
-      setTurnIndex(0);
-      turnIndexRef.current = 0;
-    } else {
-      setTurnIndex(nextIndex);
-      turnIndexRef.current = nextIndex;
-    }
-    
-    setIsProcessing(false);
-    setSelectedMenu('main');
-    setSelectedAction(null);
-  }, [turnTimeline.length]);
 
   // Handle player action
   const handleAction = async (action, target) => {
