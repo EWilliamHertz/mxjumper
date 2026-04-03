@@ -672,12 +672,30 @@ async def get_random_encounter(zone: str = 'forest'):
         if not monsters:
             monsters = await conn.fetch('SELECT * FROM monsters ORDER BY RANDOM() LIMIT $1', random.randint(1, 3))
         
+        # Difficulty scaling based on zone
+        difficulty_map = {
+            "forest": 0.4,    # 40% power (Easy starter)
+            "cave": 0.8,      # 80% power
+            "mountain": 1.0,  # 100% power
+            "wasteland": 1.5, # 150% power
+            "tundra": 2.0     # 200% power (Hard)
+        }
+        scale = difficulty_map.get(zone, 1.0)
+        
         encounter = []
         for i, m in enumerate(monsters):
             monster = dict(m)
             monster['encounter_id'] = f"enemy_{i}_{monster['id']}"
-            monster['current_hp'] = monster['base_hp']
+            
+            # Apply map-based scaling to stats
+            scaled_hp = int(monster['base_hp'] * scale)
+            monster['base_hp'] = scaled_hp
+            monster['current_hp'] = scaled_hp
+            monster['base_strength'] = int(monster['base_strength'] * scale)
+            monster['base_vitality'] = int(monster['base_vitality'] * scale)
+            monster['xp_reward'] = int(monster['xp_reward'] * scale)
             monster['current_mp'] = monster['base_mp']
+            
             encounter.append(monster)
         return encounter
 

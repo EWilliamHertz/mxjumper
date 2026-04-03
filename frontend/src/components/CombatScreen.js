@@ -478,11 +478,18 @@ export const CombatScreen = () => {
     
     const result = await captureMonster(captureTarget.id, captureName.trim());
     
-    if (result.success) {
+  if (result.success) {
       setCombatLog(prev => [...prev, `Captured ${captureName}!`]);
-      // Remove from enemy list
-      setEnemyState(prev => prev.filter(e => e.encounter_id !== captureTarget.encounter_id));
       setDefeatedMonsters(prev => [...prev, captureTarget.id]);
+      
+      setEnemyState(prev => {
+        const newState = prev.filter(e => e.encounter_id !== captureTarget.encounter_id);
+        // FORCE CHECK: If no enemies left after capture, trigger victory immediately
+        if (newState.length === 0) {
+          handleVictory();
+        }
+        return newState;
+      });
     } else {
       setCombatLog(prev => [...prev, result.message || 'Capture failed!']);
     }

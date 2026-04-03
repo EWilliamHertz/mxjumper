@@ -28,7 +28,7 @@ const MAPS = {
     spawnY: 400,
     noEncounters: true, // Forest is now safe
   },
-  wasteland: {
+wasteland: {
     name: 'The Dead Wasteland',
     bgGradient: ['#4a4e69', '#22223b', '#000000'],
     platforms: [
@@ -37,24 +37,27 @@ const MAPS = {
       { x: 500, y: 300, width: 200, height: 24, type: 'stone' },
     ],
     decorations: [{ x: 400, y: 500, type: 'stalactite' }],
-    exits: [{ x: 0, y: 460, width: 50, height: 60, to: 'mountain', label: '← Mountain' }],
+    exits: [
+      { x: 0, y: 460, width: 50, height: 60, to: 'mountain', label: '← Mountain' },
+      { x: 950, y: 460, width: 50, height: 60, to: 'tundra', label: 'Tundra →' },
+    ],
     spawnX: 80,
     spawnY: 400,
     encounterZone: 'mountain',
   },
-  cave: {
-    name: 'Dark Cave',
-    bgGradient: ['#2a2a4a', '#1a1a3a', '#0a0a2a'],
+  tundra: {
+    name: 'Frozen Tundra',
+    bgGradient: ['#e0f2fe', '#bae6fd', '#7dd3fc'],
     platforms: [
-      { x: 0, y: 520, width: 1000, height: 80, type: 'stone' },
-      { x: 100, y: 420, width: 150, height: 24, type: 'stone' },
-      { x: 300, y: 350, width: 120, height: 24, type: 'stone' },
-      { x: 500, y: 400, width: 180, height: 24, type: 'stone' },
-      { x: 150, y: 250, width: 100, height: 24, type: 'stone' },
-      { x: 400, y: 200, width: 150, height: 24, type: 'stone' },
-      { x: 700, y: 320, width: 120, height: 24, type: 'stone' },
+      { x: 0, y: 520, width: 1000, height: 80, type: 'snow' },
+      { x: 300, y: 380, width: 400, height: 20, type: 'ice' },
     ],
-    decorations: [
+    decorations: [{ x: 150, y: 480, type: 'bush' }], // Using existing sprites for now
+    exits: [{ x: 0, y: 460, width: 50, height: 60, to: 'wasteland', label: '← Wasteland' }],
+    spawnX: 80,
+    spawnY: 450,
+    encounterZone: 'tundra',
+  },decorations: [
       { x: 150, y: 100, type: 'stalactite' },
       { x: 350, y: 80, type: 'stalactite' },
       { x: 550, y: 120, type: 'stalactite' },
@@ -630,17 +633,19 @@ export const Overworld = () => {
         <span className="text-white font-bold text-sm">{mapData.name}</span>
       </div>
 
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <div className="absolute top-16 right-4 space-y-2 z-20">
-          {notifications.map((n, i) => (
-            <div key={i} className="bg-amber-500/90 text-black px-3 py-2 rounded-lg text-sm flex justify-between items-center gap-2">
-              <span>{n.from_name} wants to {n.type.replace('_', ' ')}</span>
-              <button onClick={() => clearNotification(i)} className="text-black/60 hover:text-black">✕</button>
+      {/* Notifications - Top Right with Slide-in Animation */}
+      <div className="absolute top-20 right-4 flex flex-col gap-2 z-50 pointer-events-none">
+        {notifications.map((n, i) => (
+          <div key={n.id || i} className="w-64 bg-slate-900/95 border-l-4 border-amber-500 p-3 shadow-2xl transition-all duration-500 animate-in fade-in slide-in-from-right-8 pointer-events-auto">
+            <div className="text-amber-400 font-bold text-[10px] uppercase tracking-widest">{n.type.replace('_', ' ')}</div>
+            <div className="text-white text-xs my-1">{n.from_name} wants to interact.</div>
+            <div className="flex gap-1 mt-2">
+              <button className="flex-1 bg-amber-600 text-white text-[9px] font-bold py-1 rounded hover:bg-amber-500" onClick={() => clearNotification(i)}>ACCEPT</button>
+              <button className="flex-1 bg-slate-700 text-white text-[9px] font-bold py-1 rounded hover:bg-slate-600" onClick={() => clearNotification(i)}>IGNORE</button>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
 
       {/* Controls */}
       <div className="absolute top-4 right-4 bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-1 text-slate-300 text-xs">
@@ -657,8 +662,8 @@ export const Overworld = () => {
         data-testid="game-canvas"
       />
 
-      {/* Chat */}
-      <div className="absolute bottom-4 left-4 w-72">
+      {/* Chat - Raised for better visibility on iPad */}
+      <div className="absolute bottom-16 left-4 w-72">
         <div className="bg-slate-900/90 border border-slate-600 rounded-lg overflow-hidden">
           <div className="bg-slate-800 px-2 py-1 text-xs text-slate-300 flex justify-between">
             <span>💬 Chat</span>
