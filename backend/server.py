@@ -258,6 +258,20 @@ async def init_db():
             )
         ''')
         
+        # Player bestiary (monster collection tracking)
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS player_bestiary (
+                id SERIAL PRIMARY KEY,
+                player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+                monster_id INTEGER REFERENCES monsters(id),
+                encountered BOOLEAN DEFAULT TRUE,
+                captured BOOLEAN DEFAULT FALSE,
+                times_defeated INTEGER DEFAULT 0,
+                first_seen TIMESTAMP DEFAULT NOW(),
+                UNIQUE(player_id, monster_id)
+            )
+        ''')
+        
         logger.info("Database tables created successfully")
 
 async def seed_data():
@@ -662,6 +676,16 @@ async def get_random_encounter(zone: str = 'forest'):
             encounter.append(monster)
         return encounter
 
+async def record_bestiary_encounter(player_id: int, monster_ids: list):
+    """Track that a player has encountered specific monsters."""
+    async with db_pool.acquire() as conn:
+        for mid in monster_ids:
+            await conn.execute('''
+                INSERT INTO player_bestiary (player_id, monster_id, encountered)
+                VALUES ($1, $2, TRUE)
+                ON CONFLICT (player_id, monster_id) DO NOTHING
+            ''', player_id, mid)
+
 # ==================== ALLY/CAPTURE ENDPOINTS ====================
 
 @api_router.get("/allies")
@@ -705,6 +729,13 @@ async def capture_monster(data: CaptureRequest, request: Request):
         
         ally_dict = dict(ally)
         ally_dict['sprite'] = monster['sprite']
+        
+        # Update bestiary - mark as captured
+        await conn.execute('''
+            INSERT INTO player_bestiary (player_id, monster_id, encountered, captured)
+            VALUES ($1, $2, TRUE, TRUE)
+            ON CONFLICT (player_id, monster_id) DO UPDATE SET captured = TRUE
+        ''', player['id'], monster['id'])
         
         return {"success": True, "ally": ally_dict, "message": f"Captured {data.name}!"}
 
@@ -785,9 +816,18 @@ async def get_player_abilities(request: Request):
             AND id NOT IN (SELECT ability_id FROM entity_abilities WHERE player_id = $2)
         ''', player['level'], player['id'])
         
+        # Get all locked abilities (above player level)
+        locked = await conn.fetch('''
+            SELECT * FROM abilities 
+            WHERE required_level > $1
+            AND id NOT IN (SELECT ability_id FROM entity_abilities WHERE player_id = $2)
+            ORDER BY required_level
+        ''', player['level'], player['id'])
+        
         return {
             "unlocked": [dict(a) for a in abilities],
-            "available": [dict(a) for a in available]
+            "available": [dict(a) for a in available],
+            "locked": [dict(a) for a in locked]
         }
 
 @api_router.post("/player/abilities/{ability_id}/unlock")
@@ -847,12 +887,19 @@ async def combat_victory(request: Request):
             WHERE id = $7
         ''', new_xp, new_level, xp_to_next, stat_points_gained, hp_bonus, mp_bonus, player['id'])
         
-        # Update quest progress
+        # Update quest progress and bestiary for defeated monsters
         for monster_id in defeated_monsters:
             await conn.execute('''
                 UPDATE player_quests pq SET progress = progress + 1
                 FROM quests q
                 WHERE pq.quest_id = q.id AND pq.player_id = $1 AND q.required_monster_id = $2 AND pq.completed = FALSE
+            ''', player['id'], monster_id)
+            
+            # Update bestiary - increment times_defeated
+            await conn.execute('''
+                INSERT INTO player_bestiary (player_id, monster_id, encountered, times_defeated)
+                VALUES ($1, $2, TRUE, 1)
+                ON CONFLICT (player_id, monster_id) DO UPDATE SET times_defeated = player_bestiary.times_defeated + 1
             ''', player['id'], monster_id)
         
         # Give XP to party allies
@@ -1170,6 +1217,64 @@ async def complete_quest(quest_id: int, request: Request):
         await conn.execute('UPDATE players SET gold = gold + $1, xp = xp + $2 WHERE id = $3', pq['reward_gold'], pq['reward_xp'], player['id'])
         
         return {"success": True, "reward_gold": pq['reward_gold'], "reward_xp": pq['reward_xp']}
+
+# ==================== BESTIARY ENDPOINTS ====================
+
+@api_router.get("/bestiary")
+async def get_bestiary(request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        if not player:
+            return {"monsters": [], "total": 0, "discovered": 0, "captured_count": 0}
+        
+        # Get all monsters
+        all_monsters = await conn.fetch('SELECT id, name, base_hp, base_mp, base_strength, base_agility, base_intelligence, base_vitality, sprite, zone, description, capture_rate, xp_reward FROM monsters ORDER BY id')
+        
+        # Get player's bestiary entries
+        bestiary = await conn.fetch('SELECT monster_id, encountered, captured, times_defeated, first_seen FROM player_bestiary WHERE player_id = $1', player['id'])
+        bestiary_map = {b['monster_id']: dict(b) for b in bestiary}
+        
+        result = []
+        discovered = 0
+        captured_count = 0
+        for m in all_monsters:
+            entry = dict(m)
+            b = bestiary_map.get(m['id'])
+            if b:
+                entry['encountered'] = True
+                entry['captured'] = b['captured']
+                entry['times_defeated'] = b['times_defeated']
+                entry['first_seen'] = b['first_seen'].isoformat() if b['first_seen'] else None
+                discovered += 1
+                if b['captured']:
+                    captured_count += 1
+            else:
+                entry['encountered'] = False
+                entry['captured'] = False
+                entry['times_defeated'] = 0
+                entry['first_seen'] = None
+            result.append(entry)
+        
+        return {
+            "monsters": result,
+            "total": len(all_monsters),
+            "discovered": discovered,
+            "captured_count": captured_count
+        }
+
+@api_router.post("/bestiary/encounter")
+async def record_encounter(request: Request):
+    body = await request.json()
+    monster_ids = body.get('monster_ids', [])
+    
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        if player:
+            await record_bestiary_encounter(player['id'], monster_ids)
+    return {"success": True}
+
 
 # ==================== WEBSOCKET ====================
 

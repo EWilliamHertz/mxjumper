@@ -19,7 +19,7 @@ export const GameProvider = ({ children }) => {
   const [player, setPlayer] = useState(null);
   const [party, setParty] = useState([]);
   const [allies, setAllies] = useState([]);
-  const [abilities, setAbilities] = useState({ unlocked: [], available: [] });
+  const [abilities, setAbilities] = useState({ unlocked: [], available: [], locked: [] });
   const [otherPlayers, setOtherPlayers] = useState({});
   const [gameState, setGameState] = useState('overworld');
   const [combatData, setCombatData] = useState(null);
@@ -28,6 +28,7 @@ export const GameProvider = ({ children }) => {
   const [quests, setQuests] = useState({ available: [], active: [], completed: [] });
   const [npcs, setNpcs] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [bestiary, setBestiary] = useState({ monsters: [], total: 0, discovered: 0, captured_count: 0 });
   
   const wsRef = useRef(null);
 
@@ -88,7 +89,7 @@ export const GameProvider = ({ children }) => {
       setAbilities(data);
       return data;
     } catch (err) {
-      return { unlocked: [], available: [] };
+      return { unlocked: [], available: [], locked: [] };
     }
   }, [getAuthHeader]);
 
@@ -146,6 +147,10 @@ export const GameProvider = ({ children }) => {
         fetchParty(),
         axios.get(`${API}/monsters/random?zone=${zone}`, { headers: getAuthHeader() })
       ]);
+      
+      // Record encounter in bestiary
+      const monsterIds = enemiesResponse.data.map(e => e.id);
+      axios.post(`${API}/bestiary/encounter`, { monster_ids: monsterIds }, { headers: getAuthHeader() }).catch(() => {});
       
       setCombatData({
         party: partyData.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp })),
@@ -336,6 +341,17 @@ export const GameProvider = ({ children }) => {
     }
   }, [getAuthHeader, fetchQuests, fetchPlayer]);
 
+  const fetchBestiary = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/bestiary`, { headers: getAuthHeader() });
+      setBestiary(data);
+      return data;
+    } catch (err) {
+      return { monsters: [], total: 0, discovered: 0, captured_count: 0 };
+    }
+  }, [getAuthHeader]);
+
+
   // WebSocket for multiplayer and chat
   useEffect(() => {
     if (player && gameState === 'overworld') {
@@ -438,7 +454,7 @@ export const GameProvider = ({ children }) => {
 
   return (
     <GameContext.Provider value={{
-      player, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications,
+      player, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications, bestiary,
       setGameState, setCombatData,
       fetchPlayer, createPlayer, fetchParty, fetchAllies, fetchAbilities,
       toggleParty, allocateStats, unlockAbility,
@@ -448,6 +464,7 @@ export const GameProvider = ({ children }) => {
       fetchFriends, sendFriendRequest, acceptFriend,
       fetchNpcs, interactNpc, buyFromNpc,
       fetchQuests, acceptQuest, completeQuest,
+      fetchBestiary,
       sendMultiplayerRequest, clearNotification
     }}>
       {children}

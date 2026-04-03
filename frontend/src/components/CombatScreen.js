@@ -217,6 +217,11 @@ export const CombatScreen = () => {
   const [defeatedMonsters, setDefeatedMonsters] = useState([]);
   
   const processedTurnsRef = useRef(new Set());
+  const enemyTimerRef = useRef(null);
+  const turnIndexRef = useRef(0);
+
+  // Keep ref in sync with state
+  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
 
   // Initialize combat
   useEffect(() => {
@@ -296,20 +301,24 @@ export const CombatScreen = () => {
   }, []);
 
   const advanceTurn = useCallback(() => {
-    const nextIndex = turnIndex + 1;
+    const current = turnIndexRef.current;
+    const nextIndex = current + 1;
     
     // If we're running low on timeline, regenerate
     if (nextIndex >= turnTimeline.length - 2) {
+      processedTurnsRef.current = new Set();
       setTimelineOffset(prev => prev + 100);
       setTurnIndex(0);
+      turnIndexRef.current = 0;
     } else {
       setTurnIndex(nextIndex);
+      turnIndexRef.current = nextIndex;
     }
     
     setIsProcessing(false);
     setSelectedMenu('main');
     setSelectedAction(null);
-  }, [turnIndex, turnTimeline.length]);
+  }, [turnTimeline.length]);
 
   // Handle player action
   const handleAction = async (action, target) => {
@@ -405,44 +414,52 @@ export const CombatScreen = () => {
     }
   };
 
-  // Enemy AI
+  // Enemy AI - NO state changes that trigger re-render inside the effect
+  const isEnemyActingRef = useRef(false);
+  
   useEffect(() => {
-    if (!battleStarted || showVictory || !currentActor || !currentActor.isEnemy || isProcessing) return;
+    if (!battleStarted || showVictory) return;
+    if (!currentActor || !currentActor.isEnemy) return;
     
     const turnKey = `${turnIndex}-${timelineOffset}`;
     if (processedTurnsRef.current.has(turnKey)) return;
+    if (isEnemyActingRef.current) return;
     
     processedTurnsRef.current.add(turnKey);
-    setIsProcessing(true);
+    isEnemyActingRef.current = true;
+    
+    const enemy = currentActor;
     
     const timer = setTimeout(() => {
-      const aliveParty = partyState.filter(p => p.current_hp > 0);
-      if (aliveParty.length === 0) {
-        setIsProcessing(false);
-        return;
-      }
+      setPartyState(prev => {
+        const aliveParty = prev.filter(p => p.current_hp > 0);
+        if (aliveParty.length === 0) return prev;
+        
+        const target = aliveParty[Math.floor(Math.random() * aliveParty.length)];
+        const str = enemy.base_strength || 10;
+        const baseDamage = Math.floor(str * (1 + Math.random() * 0.5));
+        const isCrit = Math.random() < 0.1;
+        const finalDamage = isCrit ? baseDamage * 2 : baseDamage;
+        
+        addDamageNumber(700, 250, finalDamage, isCrit ? 'critical' : 'damage');
+        setCombatLog(l => [...l, `${enemy.name} attacks ${target.name} for ${finalDamage}!${isCrit ? ' CRITICAL!' : ''}`]);
+        
+        return prev.map(p => {
+          if ((target.type === 'player' && p.type === 'player') || (target.id && p.id === target.id)) {
+            return { ...p, current_hp: Math.max(0, p.current_hp - finalDamage) };
+          }
+          return p;
+        });
+      });
       
-      const target = aliveParty[Math.floor(Math.random() * aliveParty.length)];
-      const str = currentActor.base_strength || 10;
-      const baseDamage = Math.floor(str * (1 + Math.random() * 0.5));
-      const isCrit = Math.random() < 0.1;
-      const finalDamage = isCrit ? baseDamage * 2 : baseDamage;
-      
-      setPartyState(prev => prev.map(p => {
-        if ((target.type === 'player' && p.type === 'player') || (target.id && p.id === target.id)) {
-          return { ...p, current_hp: Math.max(0, p.current_hp - finalDamage) };
-        }
-        return p;
-      }));
-      
-      addDamageNumber(700, 250, finalDamage, isCrit ? 'critical' : 'damage');
-      setCombatLog(prev => [...prev, `${currentActor.name} attacks ${target.name} for ${finalDamage}!`]);
-      
-      setTimeout(() => advanceTurn(), 700);
+      setTimeout(() => {
+        isEnemyActingRef.current = false;
+        advanceTurn();
+      }, 700);
     }, 800);
     
     return () => clearTimeout(timer);
-  }, [turnIndex, timelineOffset, currentActor, battleStarted, showVictory, isProcessing, partyState, advanceTurn]);
+  }, [turnIndex, timelineOffset, battleStarted, showVictory, currentActor, advanceTurn]);
 
   const handleCapture = async () => {
     if (!captureTarget || !captureName.trim()) return;
@@ -542,13 +559,20 @@ export const CombatScreen = () => {
                 ((currentActor.type === 'player' && member.type === 'player') || currentActor.id === member.id);
               
               return (
-                <div key={member.type === 'player' ? 'player' : member.id} className={`relative ${isActive ? 'scale-110' : ''}`}>
+                <div key={member.type === 'player' ? 'player' : member.id} className={`relative transition-all duration-300 ${isActive ? 'scale-110' : ''}`}>
                   {isActive && <div className="absolute -left-6 top-1/2 -translate-y-1/2 text-lg animate-bounce">▶</div>}
-                  <div className={`w-16 h-20 flex items-center justify-center bg-slate-800/50 rounded-xl border-2 ${isActive ? 'border-amber-400' : 'border-slate-600'}`}>
+                  <div className={`w-20 h-20 flex items-center justify-center bg-slate-800/50 rounded-xl border-2 ${isActive ? 'border-amber-400 shadow-lg shadow-amber-400/30' : 'border-cyan-500/40'}`}>
                     {member.type === 'player' ? <PlayerSprite size={48} /> : <MonsterSprite type={member.sprite} size={48} />}
                   </div>
-                  <div className="text-center mt-0.5">
+                  <div className="text-center mt-1">
                     <div className="text-cyan-300 font-bold text-[10px]">{member.name}</div>
+                    <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full transition-all duration-300 ${
+                        (member.current_hp / member.max_hp) > 0.5 ? 'bg-green-500' 
+                        : (member.current_hp / member.max_hp) > 0.25 ? 'bg-yellow-500' : 'bg-red-500'
+                      }`} style={{ width: `${(member.current_hp / member.max_hp) * 100}%` }} />
+                    </div>
+                    <div className="text-[9px] text-slate-400">{member.current_hp}/{member.max_hp}</div>
                   </div>
                 </div>
               );
