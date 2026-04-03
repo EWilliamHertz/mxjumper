@@ -166,8 +166,29 @@ export const Overworld = () => {
   const [showEntityMenu, setShowEntityMenu] = useState(false);
   const [npcDialog, setNpcDialog] = useState(null);
   
+  // NEW: Day/Night and Inventory State
+  const [gameTime, setGameTime] = useState(0); 
+  const [showInventory, setShowInventory] = useState(false);
+
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
+
+  // NEW: Day/Night Cycle Timer (1 game day = 10 real minutes)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setGameTime(prev => (prev + 1) % 600); // 600 seconds = 10 mins
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // NEW: Keybinds for Inventory (Press 'I')
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key.toLowerCase() === 'i') setShowInventory(prev => !prev);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const mapData = MAPS[currentMap];
 
@@ -638,12 +659,49 @@ export const Overworld = () => {
       </div>
 
       {/* Map name */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 px-4 py-1 rounded-lg border border-slate-600">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 px-4 py-1 rounded-lg border border-slate-600 z-10">
         <span className="text-white font-bold text-sm">{mapData.name}</span>
       </div>
 
+      {/* NEW: Day/Night Visual Overlay */}
+      <div className={`absolute inset-0 pointer-events-none transition-colors duration-1000 z-0
+        ${gameTime > 300 && gameTime < 450 ? 'bg-orange-900/20' : ''} 
+        ${gameTime >= 450 ? 'bg-blue-950/40' : ''}`} 
+      />
+
+      {/* NEW: Quest Tracker HUD */}
+      <div className="absolute top-4 right-4 w-64 bg-black/50 border border-slate-700/50 rounded-lg p-3 z-10 backdrop-blur-sm pointer-events-none">
+        <h3 className="text-amber-400 font-bold text-xs uppercase mb-2 border-b border-slate-700 pb-1">Active Quests</h3>
+        {quests?.active?.length > 0 ? quests.active.map(q => (
+          <div key={q.id} className="text-white text-[10px] mb-1">
+            • {q.name || q.title} <span className="text-slate-400">({q.progress}/{q.required_count})</span>
+          </div>
+        )) : (
+          <div className="text-slate-500 text-[10px] italic">No active quests.</div>
+        )}
+      </div>
+
+      {/* NEW: Diablo-style Inventory Modal */}
+      {showInventory && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-900 border-4 border-slate-700 rounded-xl z-50 p-4 shadow-2xl flex flex-col">
+          <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
+            <h2 className="text-amber-500 font-bold text-lg">Inventory</h2>
+            <button onClick={() => setShowInventory(false)} className="text-white hover:text-red-500 font-bold">X</button>
+          </div>
+          <div className="grid grid-cols-4 gap-2 flex-1 overflow-y-auto">
+            {player?.inventory?.length > 0 ? player.inventory.map((item, idx) => (
+              <div key={idx} className={`aspect-square bg-slate-800 border-2 rounded flex items-center justify-center cursor-pointer hover:bg-slate-700 ${item.rarity === 'legendary' ? 'border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]' : 'border-slate-600'}`}>
+                <span className="text-[10px] text-center text-white">{item.name}</span>
+              </div>
+            )) : (
+              <div className="col-span-4 text-center text-slate-500 text-sm mt-10">Your bag is empty. Go hunt!</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Notifications - Top Right with Slide-in Animation */}
-      <div className="absolute top-20 right-4 flex flex-col gap-2 z-50 pointer-events-none">
+      <div className="absolute top-32 right-4 flex flex-col gap-2 z-50 pointer-events-none">
         {notifications.map((n, i) => (
           <div key={n.id || i} className="w-64 bg-slate-900/95 border-l-4 border-amber-500 p-3 shadow-2xl transition-all duration-500 animate-in fade-in slide-in-from-right-8 pointer-events-auto">
             <div className="text-amber-400 font-bold text-[10px] uppercase tracking-widest">{n.type.replace('_', ' ')}</div>
@@ -666,7 +724,7 @@ export const Overworld = () => {
         ref={canvasRef}
         width={1000}
         height={600}
-        className="border-4 border-slate-800 rounded-lg shadow-2xl cursor-pointer"
+        className="border-4 border-slate-800 rounded-lg shadow-2xl cursor-pointer relative z-0"
         onClick={handleCanvasClick}
         data-testid="game-canvas"
       />

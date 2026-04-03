@@ -216,8 +216,9 @@ export const CombatScreen = () => {
   const [captureTarget, setCaptureTarget] = useState(null);
   const [captureName, setCaptureName] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [battleStarted, setBattleStarted] = useState(false);
+const [battleStarted, setBattleStarted] = useState(false);
   const [defeatedMonsters, setDefeatedMonsters] = useState([]);
+  const [isShaking, setIsShaking] = useState(false); // NEW
   
   const processedTurnsRef = useRef(new Set());
   const enemyTimerRef = useRef(null);
@@ -338,9 +339,21 @@ export const CombatScreen = () => {
 
     const actor = currentActor;
     
-    if (action === 'attack') {
+  if (action === 'attack') {
       const { damage, isCrit } = executeAttack(actor, target);
       const newHp = Math.max(0, target.current_hp - damage);
+      
+      // NEW: Game Juice Screen Shake
+      if (isCrit) {
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 300); // Stop shaking after 300ms
+      }
+
+      // NEW: Game Juice Screen Shake
+      if (isCrit) {
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 300); // Stop shaking after 300ms
+      }
       
       setEnemyState(prev => prev.map(e => 
         e.encounter_id === target.encounter_id 
