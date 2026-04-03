@@ -715,27 +715,21 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
       {duelSetup && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-950 border-4 border-red-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(239,68,68,0.3)] flex flex-col">
            <h2 className="text-xl text-red-400 font-black uppercase tracking-widest text-center mb-2">Challenge {duelSetup.target.name}</h2>
-           <p className="text-slate-400 text-xs text-center mb-4">Set a gold wager. The winner takes it all.</p>
-           
+           <p className="text-slate-400 text-xs text-center mb-4">Set a gold wager. Winner takes it all.</p>
            <div className="bg-slate-900 p-4 rounded-lg border border-slate-700 mb-4 flex justify-between items-center">
              <span className="text-white font-bold text-sm">Wager:</span>
              <div className="flex items-center gap-2">
-               <button onClick={() => setDuelSetup(p => ({...p, wager: Math.max(0, p.wager - 100)}))} className="bg-slate-700 hover:bg-slate-600 px-2 rounded text-white">-</button>
+               <button onClick={() => setDuelSetup(p => ({...p, wager: Math.max(0, p.wager - 100)}))} className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white font-bold">-</button>
                <span className="text-amber-400 font-bold w-12 text-center">{duelSetup.wager}G</span>
-               <button onClick={() => setDuelSetup(p => ({...p, wager: Math.min(player?.gold || 0, p.wager + 100)}))} className="bg-slate-700 hover:bg-slate-600 px-2 rounded text-white">+</button>
+               <button onClick={() => setDuelSetup(p => ({...p, wager: Math.min(player?.gold || 0, p.wager + 100)}))} className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white font-bold">+</button>
              </div>
            </div>
-
            <div className="flex gap-2">
-             <button 
-                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest"
+             <button className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest"
                 onClick={() => { 
-                  // In GameContext.js, you'll need to update sendMultiplayerRequest to accept a payload
                   sendMultiplayerRequest('duel_request', duelSetup.target.id, { wager: duelSetup.wager }); 
                   setDuelSetup(null); 
-                }}>
-                Send Challenge
-             </button>
+                }}>Send Challenge</button>
              <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded uppercase text-xs" onClick={() => setDuelSetup(null)}>Cancel</button>
            </div>
         </div>

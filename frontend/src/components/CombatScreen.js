@@ -216,66 +216,19 @@ export const CombatScreen = () => {
   const [captureTarget, setCaptureTarget] = useState(null);
   const [captureName, setCaptureName] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-const [battleStarted, setBattleStarted] = useState(false);
-  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
-  const [isShaking, setIsShaking] = useState(false);
-  
-  const processedTurnsRef = useRef(new Set());
-  const enemyTimerRef = useRef(null);
-  const turnIndexRef = useRef(0);
-  const processingRef = useRef(false); // NEW: Lock to prevent spam-click hangs
+  const [battleStarted, setBattleStarted] = useState(false);
+  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
+  const [isShaking, setIsShaking] = useState(false);
+  
+  const processedTurnsRef = useRef(new Set());
+  const turnIndexRef = useRef(0);
+  const processingRef = useRef(false); // Prevents the spam-click hang
 
+  // Keep ref in sync with state
+  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
 
-
-
-  // Keep ref in sync with state
-  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
-
-
-
-
-  // 1. Logic Definitions FIRST (Fixes "Cannot access before initialization" crash)
-  const currentActor = useMemo(() => {
-    if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
-    return turnTimeline[turnIndex];
-  }, [turnTimeline, turnIndex]);
-
-
-
-
-  const isPlayerTurn = useMemo(() => {
-    return currentActor && !currentActor.isEnemy && !isProcessing;
-  }, [currentActor, isProcessing]);
-
-
-
-
-  const advanceTurn = useCallback(() => {
-    const nextIndex = turnIndexRef.current + 1;
-    if (nextIndex >= turnTimeline.length - 2) {
-      processedTurnsRef.current = new Set();
-      setTimelineOffset(prev => prev + 100);
-      setTurnIndex(0);
-    } else {
-      setTurnIndex(nextIndex);
-    }
-    setIsProcessing(false);
-    processingRef.current = false; // Release the lock
-    setSelectedMenu('main');
-    setSelectedAction(null);
-  }, [turnTimeline.length]);
-
-
-
-
-  const handleVictory = useCallback(async () => {
-    if (showVictory) return;
-    setShowVictory(true);
-    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
-    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
-    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
-    setVictoryData({ ...result, totalXP });
-  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
+  // --- 1. Logic Definitions defined before Effects ---
+  const currentActor = useMemo(() => {
     if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
     return turnTimeline[turnIndex];
   }, [turnTimeline, turnIndex]);
@@ -284,9 +237,53 @@ const [battleStarted, setBattleStarted] = useState(false);
     return currentActor && !currentActor.isEnemy && !isProcessing;
   }, [currentActor, isProcessing]);
 
-  
+  const advanceTurn = useCallback(() => {
+    const current = turnIndexRef.current;
+    const nextIndex = current + 1;
+    
+    if (nextIndex >= turnTimeline.length - 2) {
+      processedTurnsRef.current = new Set();
+      setTimelineOffset(prev => prev + 100);
+      setTurnIndex(0);
+      turnIndexRef.current = 0;
+    } else {
+      setTurnIndex(nextIndex);
+      turnIndexRef.current = nextIndex;
+    }
+    
+    setIsProcessing(false);
+    processingRef.current = false; // Release the lock
+    setSelectedMenu('main');
+    setSelectedAction(null);
+  }, [turnTimeline.length]);
 
-  // Initialize combat
+  const handleVictory = useCallback(async () => {
+    if (showVictory) return;
+    setShowVictory(true);
+    
+    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
+    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
+    
+    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
+    setVictoryData({ ...result, totalXP });
+  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
+
+  const addDamageNumber = useCallback((x, y, value, type = 'damage') => {
+    const id = Date.now() + Math.random();
+    setDamageNumbers(prev => [...prev, { id, x, y, value, type }]);
+    setTimeout(() => setDamageNumbers(prev => prev.filter(d => d.id !== id)), 1000);
+  }, []);
+
+  const executeAttack = useCallback((attacker, target, multiplier = 1) => {
+    const str = attacker.isEnemy ? (attacker.base_strength || 10) : (attacker.strength || 10);
+    const def = target.isEnemy ? (target.base_vitality || 5) : (target.vitality || 5);
+    
+    const baseDamage = Math.max(1, Math.floor((str * (1 + Math.random() * 0.4) * multiplier) - (def * 0.5)));
+    const isCrit = Math.random() < 0.1;
+    return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit };
+  }, []);
+
+  // --- 2. Effects ---
   useEffect(() => {
     if (combatData && !battleStarted) {
       setPartyState(combatData.party.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp })));
@@ -298,23 +295,34 @@ const [battleStarted, setBattleStarted] = useState(false);
       processedTurnsRef.current = new Set();
       setDefeatedMonsters([]);
       setIsProcessing(false);
+      processingRef.current = false;
     }
   }, [combatData, battleStarted]);
 
-  // Generate a STABLE timeline. Do not recalculate on HP changes!
   useEffect(() => {
     if (!battleStarted || !combatData) return;
-    
-    const baseParty = combatData.party;
-    const baseEnemies = combatData.enemies;
-    
-    const newTimeline = calculateTurnOrder(baseParty, baseEnemies, timelineOffset, 20);
+    const newTimeline = calculateTurnOrder(combatData.party, combatData.enemies, timelineOffset, 20);
     setTurnTimeline(newTimeline);
   }, [timelineOffset, battleStarted, combatData]);
 
-  // NEW: Auto-skip dead actors to prevent the queue from freezing
   useEffect(() => {
-    if (!currentActor || !battleStarted || showVictory) return;
+    if (!battleStarted) return;
+    const aliveParty = partyState.filter(p => p.current_hp > 0);
+    const aliveEnemies = enemyState.filter(e => e.current_hp > 0);
+
+    if (aliveParty.length === 0) {
+      setCombatLog(prev => [...prev, 'Party defeated...']);
+      setTimeout(() => {
+        setGameState('overworld');
+        setCombatData(null);
+      }, 2000);
+    } else if (aliveEnemies.length === 0 && !showVictory) {
+      handleVictory();
+    }
+  }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
+
+  useEffect(() => {
+    if (!currentActor || !battleStarted || showVictory || isProcessing || processingRef.current) return;
     
     let isDead = false;
     if (currentActor.isEnemy) {
@@ -326,11 +334,139 @@ const [battleStarted, setBattleStarted] = useState(false);
     }
 
     if (isDead) {
-      // Use a tiny timeout to safely step over the dead character
       const timer = setTimeout(() => advanceTurn(), 50);
       return () => clearTimeout(timer);
     }
-  }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn]);
+  }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn, isProcessing]);
+
+  const isEnemyActingRef = useRef(false);
+  useEffect(() => {
+    if (!battleStarted || showVictory || !currentActor || !currentActor.isEnemy) return;
+    
+    const turnKey = `${turnIndex}-${timelineOffset}`;
+    if (processedTurnsRef.current.has(turnKey) || isEnemyActingRef.current) return;
+    
+    processedTurnsRef.current.add(turnKey);
+    isEnemyActingRef.current = true;
+    
+    const enemy = currentActor;
+    const timer = setTimeout(() => {
+      setPartyState(prev => {
+        const aliveParty = prev.filter(p => p.current_hp > 0);
+        if (aliveParty.length === 0) return prev;
+        
+        const target = aliveParty[Math.floor(Math.random() * aliveParty.length)];
+        const { damage, isCrit } = executeAttack(enemy, target);
+        
+        addDamageNumber(700, 250, damage, isCrit ? 'critical' : 'damage');
+        setCombatLog(l => [...l, `${enemy.name} attacks ${target.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
+        
+        return prev.map(p => {
+          if ((target.type === 'player' && p.type === 'player') || (target.id && p.id === target.id)) {
+            return { ...p, current_hp: Math.max(0, p.current_hp - damage) };
+          }
+          return p;
+        });
+      });
+      
+      setTimeout(() => {
+        isEnemyActingRef.current = false;
+        advanceTurn();
+      }, 700);
+    }, 800);
+    
+    return () => clearTimeout(timer);
+  }, [turnIndex, timelineOffset, battleStarted, showVictory, currentActor, advanceTurn, executeAttack, addDamageNumber]);
+
+  // --- 3. Player Action Logic ---
+  const handleAction = async (action, target) => {
+    if (isProcessing || !isPlayerTurn || processingRef.current) return;
+    setIsProcessing(true);
+    processingRef.current = true;
+
+    const actor = currentActor;
+    
+    if (action === 'attack') {
+      const { damage, isCrit } = executeAttack(actor, target);
+      const newHp = Math.max(0, target.current_hp - damage);
+      
+      if (isCrit) {
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 300);
+      }
+
+      setEnemyState(prev => prev.map(e => 
+        e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e
+      ));
+      
+      if (newHp <= 0) setDefeatedMonsters(prev => [...prev, target.id]);
+      
+      addDamageNumber(450, 200, damage, isCrit ? 'critical' : 'damage');
+      setCombatLog(prev => [...prev, `${actor.name} attacks ${target.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
+      setTimeout(() => advanceTurn(), 600);
+    } 
+    else if (action === 'capture') {
+      setCaptureTarget(target);
+      setCaptureName(target.name);
+      setShowCapture(true);
+      setIsProcessing(false);
+      processingRef.current = false;
+      return;
+    }
+    else if (action.type === 'ability') {
+      const ability = action.ability;
+      const actorMp = actor.current_mp || 0;
+      
+      if (actorMp < ability.mp_cost) {
+        setCombatLog(prev => [...prev, `Not enough MP!`]);
+        setIsProcessing(false);
+        processingRef.current = false;
+        return;
+      }
+      
+      setPartyState(prev => prev.map(p => {
+        if ((actor.type === 'player' && p.type === 'player') || (actor.id && p.id === actor.id)) {
+          return { ...p, current_mp: Math.max(0, p.current_mp - ability.mp_cost) };
+        }
+        return p;
+      }));
+
+      if (ability.ability_type === 'heal' || ability.ability_type === 'heal_all') {
+        const healAmount = Math.floor((actor.intelligence || 10) * 2 + 20);
+        if (ability.ability_type === 'heal_all') {
+          setPartyState(prev => prev.map(p => ({ ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) })));
+          addDamageNumber(700, 250, healAmount, 'heal');
+          setCombatLog(prev => [...prev, `${actor.name} heals everyone for ${healAmount}!`]);
+        } else {
+          setPartyState(prev => prev.map(p => (target.type === 'player' ? p.type === 'player' : p.id === target.id) ? { ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) } : p));
+          addDamageNumber(700, 250, healAmount, 'heal');
+          setCombatLog(prev => [...prev, `${actor.name} heals ${target.name} for ${healAmount}!`]);
+        }
+      } else {
+        const { damage, isCrit } = executeAttack(actor, target, ability.damage_multiplier);
+        const newHp = Math.max(0, target.current_hp - damage);
+        
+        if (isCrit) {
+          setIsShaking(true);
+          setTimeout(() => setIsShaking(false), 300);
+        }
+
+        setEnemyState(prev => prev.map(e => e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e));
+        if (newHp <= 0) setDefeatedMonsters(prev => [...prev, target.id]);
+        
+        addDamageNumber(450, 200, damage, isCrit ? 'critical' : 'damage');
+        setCombatLog(prev => [...prev, `${actor.name} uses ${ability.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
+      }
+      setTimeout(() => advanceTurn(), 600);
+    }
+    else if (action === 'flee') {
+      setCombatLog(prev => [...prev, `${actor.name} flees!`]);
+      setTimeout(() => {
+        setGameState('overworld');
+        setCombatData(null);
+      }, 500);
+    }
+  };
 
   
 
