@@ -1,115 +1,330 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-dark: #050505;
+  --surface: #12121c;
+  --panel: rgba(20, 20, 40, 0.9);
+  --panel-border: #ffffff;
+  --primary: #FF3B30;
+  --secondary: #00E5FF;
+  --accent: #FFD700;
+  --text-main: #ffffff;
+  --text-muted: #8b8b99;
+  --hp-bar: #FF3366;
+  --mp-bar: #33CCFF;
+  --exp-bar: #FFD700;
+  --ctb-active: #00FF66;
+  --ctb-enemy: #FF3366;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-    margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  font-family: 'VT323', monospace;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  image-rendering: pixelated;
 }
 
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+.font-pixel {
+  font-family: 'Press Start 2P', monospace;
+}
+
+.font-body {
+  font-family: 'VT323', monospace;
+}
+
+/* Game Panel Styles */
+.game-panel {
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 1);
+}
+
+.game-panel-inner {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin: 2px;
+  padding: 8px;
+}
+
+/* Progress Bars */
+.hp-bar {
+  background: linear-gradient(90deg, var(--hp-bar), #ff6699);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.mp-bar {
+  background: linear-gradient(90deg, var(--mp-bar), #66d9ff);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.exp-bar {
+  background: linear-gradient(90deg, var(--exp-bar), #ffeb3b);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.bar-container {
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  height: 16px;
+  position: relative;
+}
+
+.bar-label {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  text-shadow: 1px 1px 0 #000;
+  z-index: 1;
+}
+
+/* Menu Items */
+.menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.1s ease;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(4px);
+}
+
+.menu-item:hover::before {
+  content: '▶';
+  position: absolute;
+  left: 4px;
+}
+
+.menu-item.selected {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.menu-item.selected::before {
+  content: '▶';
+  position: absolute;
+  left: 4px;
+  animation: blink 0.5s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* CTB Timeline */
+.ctb-turn {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  background: var(--surface);
+  position: relative;
+}
+
+.ctb-turn.active {
+  border-color: var(--ctb-active);
+  box-shadow: 0 0 8px var(--ctb-active);
+}
+
+.ctb-turn.enemy {
+  border-color: var(--ctb-enemy);
+}
+
+.ctb-turn.ally {
+  border-color: var(--secondary);
+}
+
+/* Damage Numbers */
+.damage-text {
+  position: absolute;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 16px;
+  animation: damage-float 1s ease-out forwards;
+  pointer-events: none;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.damage-text.critical {
+  font-size: 24px;
+  color: var(--accent);
+}
+
+.damage-text.heal {
+  color: var(--ctb-active);
+}
+
+@keyframes damage-float {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+}
+
+/* Sprite Animations */
+.sprite {
+  image-rendering: pixelated;
+  transition: transform 0.1s ease;
+}
+
+.sprite.attack {
+  animation: attack-motion 0.3s ease;
+}
+
+@keyframes attack-motion {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(-20px); }
+  100% { transform: translateX(0); }
+}
+
+.sprite.hurt {
+  animation: hurt-flash 0.2s ease;
+}
+
+@keyframes hurt-flash {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(2) saturate(0); }
+}
+
+/* Canvas Styles */
+#game-canvas {
+  display: block;
+  image-rendering: pixelated;
+  background: #1a1a2e;
+}
+
+/* Input Styles */
+.game-input {
+  background: var(--surface);
+  border: 2px solid var(--panel-border);
+  color: var(--text-main);
+  padding: 8px 12px;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  outline: none;
+}
+
+.game-input:focus {
+  border-color: var(--secondary);
+  box-shadow: 0 0 8px var(--secondary);
+}
+
+.game-button {
+  background: transparent;
+  border: 2px solid var(--panel-border);
+  color: var(--text-main);
+  padding: 8px 16px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.game-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.game-button:active {
+  transform: translateY(0);
+}
+
+.game-button.primary {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.game-button.secondary {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border: 1px solid var(--panel-border);
+}
+
+/* Tooltip */
+.game-tooltip {
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+  padding: 8px;
+  font-size: 14px;
+  max-width: 200px;
+  z-index: 100;
+}
+
+/* Level Up Animation */
+.level-up {
+  animation: level-up-glow 1s ease infinite;
+}
+
+@keyframes level-up-glow {
+  0%, 100% { box-shadow: 0 0 10px var(--accent); }
+  50% { box-shadow: 0 0 30px var(--accent); }
 }
 
 @layer base {
-    :root {
-        --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-    }
+  :root {
+    --background: 0 0% 2%;
+    --foreground: 0 0% 100%;
+    --card: 240 20% 7%;
+    --card-foreground: 0 0% 100%;
+    --popover: 240 20% 7%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 4 90% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 187 100% 50%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 240 10% 15%;
+    --muted-foreground: 240 5% 55%;
+    --accent: 45 100% 50%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 100%;
+    --input: 240 10% 15%;
+    --ring: 187 100% 50%;
+    --radius: 0px;
+  }
 }
 
 @layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
-}
-
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
-
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }

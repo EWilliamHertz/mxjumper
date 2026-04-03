@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-04-03T14:25:55.723512",
+  "total_tests": 18,
+  "passed_tests": 16,
+  "success_rate": 88.88888888888889,
+  "results": [
+    {
+      "test": "API Health Check",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2026-04-03T14:25:48.765593"
+    },
+    {
+      "test": "Health Endpoint",
+      "success": true,
+      "details": "Status: 200, Response: {'status': 'healthy', 'database': True}",
+      "timestamp": "2026-04-03T14:25:48.878672"
+    },
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": "Admin ID: 1",
+      "timestamp": "2026-04-03T14:25:49.410997"
+    },
+    {
+      "test": "Auth Me Endpoint",
+      "success": true,
+      "details": "Status: 200, User: admin@game.com",
+      "timestamp": "2026-04-03T14:25:49.605638"
+    },
+    {
+      "test": "Player Creation",
+      "success": false,
+      "details": "Status: 400, Data: {'detail': 'Player already exists'}",
+      "timestamp": "2026-04-03T14:25:49.884289"
+    },
+    {
+      "test": "Get Player",
+      "success": true,
+      "details": "Status: 200, Level: 1",
+      "timestamp": "2026-04-03T14:25:50.106109"
+    },
+    {
+      "test": "Get Monsters",
+      "success": true,
+      "details": "Status: 200, Monster count: 8",
+      "timestamp": "2026-04-03T14:25:50.325563"
+    },
+    {
+      "test": "Random Encounter",
+      "success": true,
+      "details": "Status: 200, Encounter size: 1",
+      "timestamp": "2026-04-03T14:25:50.521836"
+    },
+    {
+      "test": "Get Abilities",
+      "success": true,
+      "details": "Status: 200, Ability count: 10",
+      "timestamp": "2026-04-03T14:25:50.722898"
+    },
+    {
+      "test": "Player Abilities",
+      "success": true,
+      "details": "Status: 200, Unlocked: 4, Available: 0",
+      "timestamp": "2026-04-03T14:25:51.058414"
+    },
+    {
+      "test": "Get Party",
+      "success": true,
+      "details": "Status: 200, Party size: 1",
+      "timestamp": "2026-04-03T14:25:51.324276"
+    },
+    {
+      "test": "Get Allies",
+      "success": true,
+      "details": "Status: 200, Ally count: 0",
+      "timestamp": "2026-04-03T14:25:51.640049"
+    },
+    {
+      "test": "Stat Allocation",
+      "success": true,
+      "details": "No stat points to allocate (expected)",
+      "timestamp": "2026-04-03T14:25:51.851353"
+    },
+    {
+      "test": "Heal Player",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2026-04-03T14:25:52.202701"
+    },
+    {
+      "test": "Position Update",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2026-04-03T14:25:52.451922"
+    },
+    {
+      "test": "Combat Victory",
+      "success": true,
+      "details": "Status: 200, XP gained: 50",
+      "timestamp": "2026-04-03T14:25:52.805751"
+    },
+    {
+      "test": "Brute Force Protection",
+      "success": false,
+      "details": "No lockout after 6 attempts",
+      "timestamp": "2026-04-03T14:25:55.622579"
+    },
+    {
+      "test": "Logout",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2026-04-03T14:25:55.723240"
+    }
+  ]
+}
