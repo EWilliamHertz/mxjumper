@@ -4,7 +4,7 @@ import { useGame } from '../contexts/GameContext';
 // Map definitions
 const MAPS = {
   forest: {
-    name: 'Emerald Forest',
+    name: 'Emerald Forest (Safe)',
     bgGradient: ['#87CEEB', '#B0E0E6', '#90EE90'],
     platforms: [
       { x: 0, y: 520, width: 1000, height: 80, type: 'ground' },
@@ -26,7 +26,21 @@ const MAPS = {
     ],
     spawnX: 100,
     spawnY: 400,
-    encounterZone: 'forest',
+    noEncounters: true, // Forest is now safe
+  },
+  wasteland: {
+    name: 'The Dead Wasteland',
+    bgGradient: ['#4a4e69', '#22223b', '#000000'],
+    platforms: [
+      { x: 0, y: 520, width: 1000, height: 80, type: 'stone' },
+      { x: 200, y: 400, width: 200, height: 24, type: 'stone' },
+      { x: 500, y: 300, width: 200, height: 24, type: 'stone' },
+    ],
+    decorations: [{ x: 400, y: 500, type: 'stalactite' }],
+    exits: [{ x: 0, y: 460, width: 50, height: 60, to: 'mountain', label: '← Mountain' }],
+    spawnX: 80,
+    spawnY: 400,
+    encounterZone: 'mountain',
   },
   cave: {
     name: 'Dark Cave',
@@ -75,6 +89,7 @@ const MAPS = {
     exits: [
       { x: 0, y: 460, width: 50, height: 60, to: 'cave', label: '← Cave' },
       { x: 950, y: 460, width: 50, height: 60, to: 'village', label: 'Village →' },
+    { x: 720, y: 120, width: 60, height: 60, to: 'wasteland', label: 'Wasteland ↑' },
     ],
     spawnX: 80,
     spawnY: 400,
@@ -109,8 +124,8 @@ const MAPS = {
 const GRAVITY = 0.6;
 const JUMP_FORCE = -14;
 const MOVE_SPEED = 5;
-const ENCOUNTER_STEPS = 25;
-const ENCOUNTER_CHANCE = 0.12;
+const ENCOUNTER_STEPS = 15; // Fewer steps needed
+const ENCOUNTER_CHANCE = 0.25; // Higher chance of encounter
 const AUTO_SAVE_INTERVAL = 5000;
 
 export const Overworld = () => {
@@ -354,11 +369,12 @@ export const Overworld = () => {
     return () => clearInterval(interval);
   }, [playerState.x, playerState.y, playerState.facing, sendPosition, currentMap]);
 
-  // Handle canvas click
+  // Handle canvas click with scaling correction
   const handleCanvasClick = async (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    // Normalize coordinates based on internal resolution (1000x600)
+    const clickX = (e.clientX - rect.left) * (1000 / rect.width);
+    const clickY = (e.clientY - rect.top) * (600 / rect.height);
     
     // Check NPC click
     if (mapData.npcs) {

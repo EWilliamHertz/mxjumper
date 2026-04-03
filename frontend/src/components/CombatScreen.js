@@ -500,10 +500,10 @@ export const CombatScreen = () => {
 
   if (!combatData) return null;
 
- return (
-    <div className="w-full h-full flex bg-slate-900 relative overflow-hidden" data-testid="combat-screen">
-      {/* Lightened Background for visibility */}
-      <div className="absolute inset-0 bg-gradient-to-b from-indigo-800/20 to-black pointer-events-none" />
+return (
+    <div className="w-full h-full flex bg-slate-800 relative overflow-hidden" data-testid="combat-screen">
+      {/* Visual Background Layer - Brightened for visibility */}
+      <div className="absolute inset-0 bg-slate-700/30 pointer-events-none" />
       {/* Turn Order - Left Panel */}
       <div className="w-20 bg-slate-900/90 border-r-2 border-slate-700 p-1 flex flex-col" data-testid="ctb-timeline">
         <div className="text-amber-400 text-[10px] font-bold mb-1 text-center">TURNS</div>
