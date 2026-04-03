@@ -1,0 +1,91 @@
+{
+  "theme": "DARK",
+  "archetype": "7 (Electric & Neon - Adapted to Retro 16-bit JRPG)",
+  "colors": {
+    "background": "#050505",
+    "surface": "#12121c",
+    "panel": "rgba(20, 20, 40, 0.9)",
+    "panel_border": "#ffffff",
+    "primary": "#FF3B30",
+    "secondary": "#00E5FF",
+    "accent": "#FFD700",
+    "text_main": "#ffffff",
+    "text_muted": "#8b8b99",
+    "hp_bar": "#FF3366",
+    "mp_bar": "#33CCFF",
+    "exp_bar": "#FFD700",
+    "ctb_turn_active": "#00FF66",
+    "ctb_turn_enemy": "#FF3366"
+  },
+  "typography": {
+    "font_family": {
+      "heading": "'Press Start 2P', monospace",
+      "body": "'VT323', monospace",
+      "ui": "'Courier New', Courier, monospace"
+    },
+    "scale": {
+      "h1": "text-2xl md:text-3xl",
+      "h2": "text-xl md:text-2xl",
+      "h3": "text-lg md:text-xl",
+      "body": "text-base md:text-lg",
+      "small": "text-xs md:text-sm"
+    },
+    "rules": {
+      "tracking": "tracking-normal",
+      "line_height": "leading-snug"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "container": "p-4 md:p-6",
+      "panel": "p-4",
+      "gap_small": "gap-2",
+      "gap_medium": "gap-4",
+      "gap_large": "gap-8"
+    },
+    "patterns": {
+      "battle_screen": "Grid layout with side-view character sprites on the right, enemies on the left. Absolute positioned CTB timeline on top-left. Bottom section split into Command Menu (left) and Party Status (right).",
+      "hub_screen": "Full-width/height canvas with absolute positioned UI overlays (chat bottom-left, minimap top-right, character status top-left).",
+      "panels": "Thick solid white borders (2px to 4px) mimicking classic FF windows. Sharp corners (rounded-none)."
+    }
+  },
+  "components": {
+    "button": "bg-transparent border-2 border-transparent hover:border-white text-white p-2 text-left w-full relative group cursor-pointer",
+    "panel": "bg-[rgba(20,20,40,0.9)] border-2 border-white text-white shadow-[4px_4px_0px_rgba(0,0,0,1)]",
+    "progress_bar": "h-4 w-full bg-gray-900 border border-white/50",
+    "health_bar": "h-full bg-[#FF3366] transition-all duration-300",
+    "mana_bar": "h-full bg-[#33CCFF] transition-all duration-300"
+  },
+  "animations": {
+    "hover": "translate-x-1 transition-transform",
+    "damage_text": "animate-bounce fade-up",
+    "turn_indicator": "animate-pulse",
+    "attack_motion": "translate-x-[-20px] transition-transform duration-200"
+  },
+  "media": {
+    "image_urls": {
+      "login_background": {
+        "url": "https://images.pexels.com/photos/7026467/pexels-photo-7026467.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Vibrant abstract pixelated pattern for the login/title screen"
+      },
+      "battle_background": {
+        "url": "https://images.pexels.com/photos/7026427/pexels-photo-7026427.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Dark abstract pixelated pattern for the battle background"
+      }
+    }
+  },
+  "testing": {
+    "attributes": "All interactive elements MUST have data-testid attributes (e.g., data-testid='attack-button', data-testid='login-submit')"
+  },
+  "instructions_to_main_agent": [
+    "Use 'Press Start 2P' from Google Fonts for all major headings and UI labels. Import it in index.html or index.css.",
+    "Use 'VT323' from Google Fonts for body text and descriptive text.",
+    "Implement the MapleStory-style hub as an HTML5 Canvas or with DOM elements if simple enough, but Canvas is preferred for physics.",
+    "For the UI panels (like battle menus, skill trees), use the 'panel' component styles: dark semi-transparent backgrounds with thick solid white borders and sharp corners.",
+    "Ensure the combat timeline (CTB) is clearly visible in the top-left corner, displaying character/enemy turn order with small icons.",
+    "Do NOT use generic Shadcn cards for the main game UI. Use raw HTML/Tailwind for the game interface to ensure it looks like a retro game.",
+    "Use Shadcn UI for forms like Login/Register, but heavily customize them with sharp borders, dark backgrounds, and pixel fonts.",
+    "Avoid box-shadow blur; use solid offset shadows (e.g., shadow-[4px_4px_0_#000]) for the retro feel.",
+    "Ensure Websocket multiplayer displays other players moving in real-time."
+  ]
+}
