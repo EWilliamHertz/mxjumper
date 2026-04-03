@@ -222,12 +222,13 @@ export const CombatScreen = () => {
   
   const processedTurnsRef = useRef(new Set());
   const turnIndexRef = useRef(0);
-  const processingRef = useRef(false); // Prevents the spam-click hang
+  const processingRef = useRef(false); // NEW: Prevents spam-click "Waiting..." hang
 
   // Keep ref in sync with state
   useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
 
-  // --- 1. Logic Definitions defined before Effects ---
+  // --- 1. LOGIC DEFINITIONS (Must be defined before Effects) ---
+
   const currentActor = useMemo(() => {
     if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
     return turnTimeline[turnIndex];
@@ -241,6 +242,7 @@ export const CombatScreen = () => {
     const current = turnIndexRef.current;
     const nextIndex = current + 1;
     
+    // If we're running low on timeline, regenerate
     if (nextIndex >= turnTimeline.length - 2) {
       processedTurnsRef.current = new Set();
       setTimelineOffset(prev => prev + 100);
@@ -283,7 +285,9 @@ export const CombatScreen = () => {
     return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit };
   }, []);
 
-  // --- 2. Effects ---
+  // --- 2. EFFECTS (Combat Loop) ---
+
+  // Initialize
   useEffect(() => {
     if (combatData && !battleStarted) {
       setPartyState(combatData.party.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp })));
@@ -299,12 +303,14 @@ export const CombatScreen = () => {
     }
   }, [combatData, battleStarted]);
 
+  // Generate Stable Timeline
   useEffect(() => {
     if (!battleStarted || !combatData) return;
     const newTimeline = calculateTurnOrder(combatData.party, combatData.enemies, timelineOffset, 20);
     setTurnTimeline(newTimeline);
   }, [timelineOffset, battleStarted, combatData]);
 
+  // Win/Lose check
   useEffect(() => {
     if (!battleStarted) return;
     const aliveParty = partyState.filter(p => p.current_hp > 0);
@@ -321,6 +327,7 @@ export const CombatScreen = () => {
     }
   }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
 
+  // Auto-skip dead actors
   useEffect(() => {
     if (!currentActor || !battleStarted || showVictory || isProcessing || processingRef.current) return;
     
@@ -339,6 +346,7 @@ export const CombatScreen = () => {
     }
   }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn, isProcessing]);
 
+  // Enemy AI
   const isEnemyActingRef = useRef(false);
   useEffect(() => {
     if (!battleStarted || showVictory || !currentActor || !currentActor.isEnemy) return;
@@ -378,7 +386,8 @@ export const CombatScreen = () => {
     return () => clearTimeout(timer);
   }, [turnIndex, timelineOffset, battleStarted, showVictory, currentActor, advanceTurn, executeAttack, addDamageNumber]);
 
-  // --- 3. Player Action Logic ---
+  // --- 3. PLAYER ACTIONS ---
+
   const handleAction = async (action, target) => {
     if (isProcessing || !isPlayerTurn || processingRef.current) return;
     setIsProcessing(true);
@@ -466,200 +475,7 @@ export const CombatScreen = () => {
         setCombatData(null);
       }, 500);
     }
-  };
-
-  
-
-  // Check win/lose
-  useEffect(() => {
-    if (!battleStarted) return;
-    
-    const aliveParty = partyState.filter(p => p.current_hp > 0);
-    const aliveEnemies = enemyState.filter(e => e.current_hp > 0);
-
-    if (aliveParty.length === 0) {
-      setCombatLog(prev => [...prev, 'Party defeated...']);
-      setTimeout(() => {
-        setGameState('overworld');
-        setCombatData(null);
-      }, 2000);
-    } else if (aliveEnemies.length === 0 && !showVictory) {
-      handleVictory();
-    }
-  }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
-
-  const addDamageNumber = (x, y, value, type = 'damage') => {
-    const id = Date.now() + Math.random();
-    setDamageNumbers(prev => [...prev, { id, x, y, value, type }]);
-    setTimeout(() => setDamageNumbers(prev => prev.filter(d => d.id !== id)), 1000);
-  };
-
-  const executeAttack = useCallback((attacker, target, multiplier = 1) => {
-    const str = attacker.isEnemy ? (attacker.base_strength || 10) : (attacker.strength || 10);
-    const def = target.isEnemy ? (target.base_vitality || 5) : (target.vitality || 5);
-    
-    // Formula: (Strength * Multiplier) - (Defense * 0.5)
-    const baseDamage = Math.max(1, Math.floor((str * (1 + Math.random() * 0.4) * multiplier) - (def * 0.5)));
-    
-    const isCrit = Math.random() < 0.1;
-    return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit };
-  }, []);
-
-  // Handle player action
-  const handleAction = async (action, target) => {
-    if (isProcessing || !isPlayerTurn || processingRef.current) return;
-    setIsProcessing(true);
-    processingRef.current = true; // Lock inputs
-
-    const actor = currentActor;
-    
-  if (action === 'attack') {
-      const { damage, isCrit } = executeAttack(actor, target);
-      const newHp = Math.max(0, target.current_hp - damage);
-      
-      // NEW: Game Juice Screen Shake
-      if (isCrit) {
-        setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 300); // Stop shaking after 300ms
-      }
-
-      // NEW: Game Juice Screen Shake
-      if (isCrit) {
-        setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 300); // Stop shaking after 300ms
-      }
-      
-      setEnemyState(prev => prev.map(e => 
-        e.encounter_id === target.encounter_id 
-          ? { ...e, current_hp: newHp }
-          : e
-      ));
-      
-      if (newHp <= 0) {
-        setDefeatedMonsters(prev => [...prev, target.id]);
-      }
-      
-      addDamageNumber(450, 200, damage, isCrit ? 'critical' : 'damage');
-      setCombatLog(prev => [...prev, `${actor.name} attacks ${target.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
-      setTimeout(() => advanceTurn(), 600);
-    } 
-    else if (action === 'capture') {
-      setCaptureTarget(target);
-      setCaptureName(target.name);
-      setShowCapture(true);
-      setIsProcessing(false);
-      return;
-    }
-    else if (action.type === 'ability') {
-      const ability = action.ability;
-      const actorMp = actor.current_mp || 0;
-      
-      if (actorMp < ability.mp_cost) {
-        setCombatLog(prev => [...prev, `Not enough MP!`]);
-        setIsProcessing(false);
-        return;
-      }
-      
-      setPartyState(prev => prev.map(p => {
-        if ((actor.type === 'player' && p.type === 'player') || (actor.id && p.id === actor.id)) {
-          return { ...p, current_mp: Math.max(0, p.current_mp - ability.mp_cost) };
-        }
-        return p;
-      }));
-
-      if (ability.ability_type === 'heal' || ability.ability_type === 'heal_all') {
-        const healAmount = Math.floor((actor.intelligence || 10) * 2 + 20);
-        if (ability.ability_type === 'heal_all') {
-          setPartyState(prev => prev.map(p => ({
-            ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount)
-          })));
-          addDamageNumber(700, 250, healAmount, 'heal');
-          setCombatLog(prev => [...prev, `${actor.name} heals everyone for ${healAmount}!`]);
-        } else {
-          setPartyState(prev => prev.map(p => 
-            (target.type === 'player' ? p.type === 'player' : p.id === target.id)
-              ? { ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) }
-              : p
-          ));
-          addDamageNumber(700, 250, healAmount, 'heal');
-          setCombatLog(prev => [...prev, `${actor.name} heals ${target.name} for ${healAmount}!`]);
-        }
-      } else {
-        const { damage } = executeAttack(actor, target, ability.damage_multiplier);
-        const newHp = Math.max(0, target.current_hp - damage);
-        
-        setEnemyState(prev => prev.map(e => 
-          e.encounter_id === target.encounter_id 
-            ? { ...e, current_hp: newHp }
-            : e
-        ));
-        
-        if (newHp <= 0) {
-          setDefeatedMonsters(prev => [...prev, target.id]);
-        }
-        
-        addDamageNumber(450, 200, damage, 'damage');
-        setCombatLog(prev => [...prev, `${actor.name} uses ${ability.name} for ${damage}!`]);
-      }
-      setTimeout(() => advanceTurn(), 600);
-    }
-    else if (action === 'flee') {
-      setCombatLog(prev => [...prev, `${actor.name} flees!`]);
-      setTimeout(() => {
-        setGameState('overworld');
-        setCombatData(null);
-      }, 500);
-    }
-  };
-
-  // Enemy AI - NO state changes that trigger re-render inside the effect
-  const isEnemyActingRef = useRef(false);
-  
-  useEffect(() => {
-    if (!battleStarted || showVictory) return;
-    if (!currentActor || !currentActor.isEnemy) return;
-    
-    const turnKey = `${turnIndex}-${timelineOffset}`;
-    if (processedTurnsRef.current.has(turnKey)) return;
-    if (isEnemyActingRef.current) return;
-    
-    processedTurnsRef.current.add(turnKey);
-    isEnemyActingRef.current = true;
-    
-    const enemy = currentActor;
-    
-    const timer = setTimeout(() => {
-      setPartyState(prev => {
-        const aliveParty = prev.filter(p => p.current_hp > 0);
-        if (aliveParty.length === 0) return prev;
-        
-        const target = aliveParty[Math.floor(Math.random() * aliveParty.length)];
-        const str = enemy.base_strength || 10;
-        const baseDamage = Math.floor(str * (1 + Math.random() * 0.5));
-        const isCrit = Math.random() < 0.1;
-        const finalDamage = isCrit ? baseDamage * 2 : baseDamage;
-        
-        addDamageNumber(700, 250, finalDamage, isCrit ? 'critical' : 'damage');
-        setCombatLog(l => [...l, `${enemy.name} attacks ${target.name} for ${finalDamage}!${isCrit ? ' CRITICAL!' : ''}`]);
-        
-        return prev.map(p => {
-          if ((target.type === 'player' && p.type === 'player') || (target.id && p.id === target.id)) {
-            return { ...p, current_hp: Math.max(0, p.current_hp - finalDamage) };
-          }
-          return p;
-        });
-      });
-      
-      setTimeout(() => {
-        isEnemyActingRef.current = false;
-        advanceTurn();
-      }, 700);
-    }, 800);
-    
-    return () => clearTimeout(timer);
-  }, [turnIndex, timelineOffset, battleStarted, showVictory, currentActor, advanceTurn]);
-
-  const handleCapture = async () => {
+  };  const handleCapture = async () => {
     if (!captureTarget || !captureName.trim()) return;
     setIsProcessing(true);
     

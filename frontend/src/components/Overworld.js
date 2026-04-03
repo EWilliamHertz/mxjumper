@@ -53,7 +53,10 @@ wasteland: {
       { x: 300, y: 380, width: 400, height: 20, type: 'ice' },
     ],
     decorations: [{ x: 150, y: 480, type: 'bush' }],
-    exits: [{ x: 0, y: 460, width: 50, height: 60, to: 'wasteland', label: '← Wasteland' }],
+    exits: [
+      { x: 0, y: 460, width: 50, height: 60, to: 'wasteland', label: '← Wasteland' },
+      { x: 900, y: 460, width: 50, height: 60, to: 'sunken_citadel', label: 'Sunken Citadel ↓' }
+    ],
     spawnX: 80,
     spawnY: 450,
     encounterZone: 'tundra',
@@ -101,7 +104,8 @@ wasteland: {
     exits: [
       { x: 0, y: 460, width: 50, height: 60, to: 'cave', label: '← Cave' },
       { x: 950, y: 460, width: 50, height: 60, to: 'village', label: 'Village →' },
-    { x: 720, y: 120, width: 60, height: 60, to: 'wasteland', label: 'Wasteland ↑' },
+      { x: 720, y: 120, width: 60, height: 60, to: 'wasteland', label: 'Wasteland ↑' },
+      { x: 200, y: 100, width: 60, height: 60, to: 'sky_reach', label: 'Sky Reach ↑' },
     ],
     spawnX: 80,
     spawnY: 400,
@@ -130,6 +134,46 @@ wasteland: {
     spawnX: 80,
     spawnY: 400,
     noEncounters: true,
+  },
+  sky_reach: {
+    name: 'Sky Reach',
+    bgGradient: ['#000033', '#191970', '#87CEFA'],
+    platforms: [
+      { x: 50, y: 500, width: 150, height: 20, type: 'stone' },
+      { x: 300, y: 400, width: 100, height: 20, type: 'stone' },
+      { x: 500, y: 300, width: 100, height: 20, type: 'stone' },
+      { x: 750, y: 200, width: 150, height: 20, type: 'stone' },
+    ],
+    decorations: [
+      { x: 100, y: 480, type: 'cloud' },
+      { x: 500, y: 280, type: 'cloud' },
+      { x: 800, y: 180, type: 'cloud' },
+    ],
+    exits: [
+      { x: 80, y: 440, width: 50, height: 60, to: 'mountain', label: '↓ Mountain' },
+    ],
+    spawnX: 80,
+    spawnY: 400,
+    encounterZone: 'mountain', // High level enemies
+  },
+  sunken_citadel: {
+    name: 'Sunken Citadel',
+    bgGradient: ['#0047AB', '#00008B', '#000000'],
+    platforms: [
+      { x: 0, y: 560, width: 1000, height: 40, type: 'stone' },
+      { x: 200, y: 450, width: 150, height: 20, type: 'stone' },
+      { x: 600, y: 350, width: 250, height: 20, type: 'stone' },
+    ],
+    decorations: [
+      { x: 300, y: 520, type: 'stalactite' },
+      { x: 700, y: 520, type: 'stalactite' },
+    ],
+    exits: [
+      { x: 50, y: 500, width: 50, height: 60, to: 'tundra', label: '↑ Tundra' },
+    ],
+    spawnX: 100,
+    spawnY: 480,
+    encounterZone: 'tundra', // Very high level enemies
   },
 };
 
@@ -233,11 +277,11 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
     }
   }, [currentMap, fetchNpcs]);
 
-  // Keyboard input - WASD only
+  // Keyboard input - WASD + Interact (E)
   useEffect(() => {
     const handleKeyDown = (e) => {
       const key = e.key.toLowerCase();
-      if (['w', 'a', 's', 'd', ' '].includes(key)) {
+      if (['w', 'a', 's', 'd', 'e', ' '].includes(key)) {
         keysRef.current[key] = true;
         if (key === ' ') e.preventDefault();
       }
@@ -276,32 +320,35 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
     };
   }, [showChat, chatInput, sendChatMessage, setGameState, healParty, updatePosition, playerState, currentMap, npcDialog]);
 
-  // Check map exits
-  const checkExits = useCallback((x, y) => {
+  // Check map exits (Now requires 'e' key)
+  const checkExits = useCallback((x, y, keys) => {
     const playerWidth = 40;
     const playerHeight = 56;
     
     for (const exit of mapData.exits) {
+      // Check if overlapping
       if (
         x + playerWidth > exit.x &&
         x < exit.x + exit.width &&
         y + playerHeight > exit.y &&
         y < exit.y + exit.height
       ) {
-        const newMap = MAPS[exit.to];
-        updatePosition(newMap.spawnX, newMap.spawnY, exit.to);
-        setCurrentMap(exit.to);
-        setPlayerState(prev => ({
-          ...prev,
-          x: exit.x < 100 ? 900 : newMap.spawnX,
-          y: newMap.spawnY,
-        }));
-        return true;
+        // If overlapping, require 'e' to interact
+        if (keys['e']) {
+          const newMap = MAPS[exit.to];
+          updatePosition(newMap.spawnX, newMap.spawnY, exit.to);
+          setCurrentMap(exit.to);
+          setPlayerState(prev => ({
+            ...prev,
+            x: exit.x < 100 ? 900 : newMap.spawnX,
+            y: newMap.spawnY,
+          }));
+          return true;
+        }
       }
     }
     return false;
   }, [mapData, updatePosition]);
-
   // Random encounter
   const checkEncounter = useCallback(async () => {
     if (mapData.noEncounters) return;
@@ -383,7 +430,8 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
             }
           }
           
-          if (x < 0 || x > canvas.width - playerWidth) checkExits(x, y);
+          // Pass keys to checkExits so it knows if 'E' is pressed
+          checkExits(x, y, keys);
           x = Math.max(0, Math.min(x, canvas.width - playerWidth));
           if (y > canvas.height) { y = 100; vy = 0; }
           
@@ -593,6 +641,14 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
       ctx.font = 'bold 10px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(exit.label, exit.x + exit.width / 2, exit.y - 5);
+      
+      // Flash [E] hint if overlapping
+      const pWidth = 40; const pHeight = 56;
+      if (playerState.x + pWidth > exit.x && playerState.x < exit.x + exit.width &&
+          playerState.y + pHeight > exit.y && playerState.y < exit.y + exit.height) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('[Press E]', exit.x + exit.width / 2, exit.y - 18);
+      }
     });
     
     // NPCs
