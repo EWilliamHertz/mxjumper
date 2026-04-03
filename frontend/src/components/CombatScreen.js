@@ -264,6 +264,18 @@ export const CombatScreen = () => {
     return currentActor && !currentActor.isEnemy && !isProcessing;
   }, [currentActor, isProcessing]);
 
+  const handleVictory = useCallback(async () => {
+    if (showVictory) return;
+    setShowVictory(true);
+    
+    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
+    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
+    
+    // Pass the list of IDs for the backend to record in the bestiary
+    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
+    setVictoryData({ ...result, totalXP });
+  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
+
   // Check win/lose
   useEffect(() => {
     if (!battleStarted) return;
@@ -281,18 +293,6 @@ export const CombatScreen = () => {
       handleVictory();
     }
   }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
-
-  const handleVictory = useCallback(async () => {
-    if (showVictory) return;
-    setShowVictory(true);
-    
-    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
-    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
-    
-    // Pass the list of IDs for the backend to record in the bestiary
-    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
-    setVictoryData({ ...result, totalXP });
-  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
 
   const addDamageNumber = (x, y, value, type = 'damage') => {
     const id = Date.now() + Math.random();
