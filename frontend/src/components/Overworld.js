@@ -201,6 +201,14 @@ export const Overworld = () => {
     sunken_citadel: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
   }), []);
 
+  const { 
+    player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
+    chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
+    interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest
+  } = useGame();
+  
+  const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
+
   // Handle Music Switching
   useEffect(() => {
     const audio = audioRef.current;
