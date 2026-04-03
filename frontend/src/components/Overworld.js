@@ -432,7 +432,7 @@ export const Overworld = () => {
     ctx.fill();
   };
 
-  const drawNPC = (ctx, npc) => {
+  const drawNPC = useCallback((ctx, npc) => {
     // Body
     ctx.fillStyle = npc.type === 'healer' ? '#ff69b4' : npc.type === 'shop' ? '#ffd700' : '#9370db';
     ctx.fillRect(npc.x - 12, npc.y - 30, 24, 30);
@@ -455,7 +455,7 @@ export const Overworld = () => {
       ctx.fillStyle = '#ffd700';
       ctx.fillText('[Click to talk]', npc.x, npc.y - 68);
     }
-  };
+  }, [checkNpcInteraction]);
 
   const drawPlayer = (ctx, x, y, facing, frame, name, isMain = true) => {
     const flip = facing === 'left' ? -1 : 1;
