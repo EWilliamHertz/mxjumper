@@ -523,6 +523,39 @@ async def get_current_user(request: Request) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# ==================== HELPER FUNCTIONS ====================
+
+async def get_player_party_data(player_id: int, conn):
+    """Internal helper to get full party data for PvP."""
+    player_row = await conn.fetchrow('''
+        SELECT id, name, level, hp, max_hp, mp, max_mp, strength, agility, intelligence, vitality, sprite
+        FROM players WHERE id = $1
+    ''', player_id)
+    
+    allies = await conn.fetch('''
+        SELECT ca.id, ca.name, ca.level, ca.hp, ca.max_hp, ca.mp, ca.max_mp, 
+               ca.strength, ca.agility, ca.intelligence, ca.vitality, m.sprite, ca.party_slot
+        FROM captured_allies ca
+        JOIN monsters m ON ca.monster_id = m.id
+        WHERE ca.player_id = $1 AND ca.in_party = TRUE
+        ORDER BY ca.party_slot
+    ''', player_id)
+    
+    party = [{"type": "player", "isEnemy": False, **dict(player_row)}]
+    for ally in allies:
+        party.append({"type": "ally", "isEnemy": False, **dict(ally)})
+    return party
+
+async def record_bestiary_encounter(player_id: int, monster_ids: list):
+    """Track that a player has encountered specific monsters."""
+    async with db_pool.acquire() as conn:
+        for mid in monster_ids:
+            await conn.execute('''
+                INSERT INTO player_bestiary (player_id, monster_id, encountered)
+                VALUES ($1, $2, TRUE)
+                ON CONFLICT (player_id, monster_id) DO NOTHING
+            ''', player_id, mid)
+
 # ==================== AUTH ENDPOINTS ====================
 
 @api_router.post("/auth/register")
@@ -678,33 +711,23 @@ async def heal_player(request: Request):
             await conn.execute('UPDATE captured_allies SET hp = max_hp, mp = max_mp WHERE player_id = $1', player['id'])
         return {"success": True}
 
-
-
-
 @api_router.post("/player/skill-tree/spend")
 async def spend_skill_point(node_type: str, request: Request):
-    user = await get_current_user(request)
-    async with db_pool.acquire() as conn:
-        player = await conn.fetchrow('SELECT id, skill_points, max_hp, strength FROM players WHERE user_id = $1', user['id'])
-        
-        if player['skill_points'] <= 0:
-            raise HTTPException(status_code=400, detail="No skill points available")
-            
-        if node_type == 'hp':
-            # +20 Max HP per point
-            await conn.execute('UPDATE players SET max_hp = max_hp + 20, hp = hp + 20, skill_points = skill_points - 1 WHERE id = $1', player['id'])
-        elif node_type == 'crit':
-            # We will handle crit chance in the CombatScreen.js logic based on a new 'crit_chance' column
-            # For now, let's boost Strength by 2 as a placeholder for the crit node
-            await conn.execute('UPDATE players SET strength = strength + 2, skill_points = skill_points - 1 WHERE id = $1', player['id'])
-        elif node_type == 'cleave':
-            # Mark a new boolean column 'can_cleave' as True
-            await conn.execute('UPDATE players SET skill_points = skill_points - 1 WHERE id = $1', player['id'])
-            
-        return {"success": True, "message": f"Upgraded {node_type}!"}
-
-
-
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, skill_points, max_hp, strength FROM players WHERE user_id = $1', user['id'])
+        
+        if player['skill_points'] <= 0:
+            raise HTTPException(status_code=400, detail="No skill points available")
+            
+        if node_type == 'hp':
+            await conn.execute('UPDATE players SET max_hp = max_hp + 20, hp = hp + 20, skill_points = skill_points - 1 WHERE id = $1', player['id'])
+        elif node_type == 'crit':
+            await conn.execute('UPDATE players SET strength = strength + 2, skill_points = skill_points - 1 WHERE id = $1', player['id'])
+        elif node_type == 'cleave':
+            await conn.execute('UPDATE players SET skill_points = skill_points - 1 WHERE id = $1', player['id'])
+            
+        return {"success": True, "message": f"Upgraded {node_type}!"}
 
 # ==================== MONSTER ENDPOINTS ====================
 
@@ -722,13 +745,12 @@ async def get_random_encounter(zone: str = 'forest'):
         if not monsters:
             monsters = await conn.fetch('SELECT * FROM monsters ORDER BY RANDOM() LIMIT $1', random.randint(1, 3))
         
-        # Difficulty scaling based on zone
         difficulty_map = {
-            "forest": 0.4,    # 40% power (Easy starter)
-            "cave": 0.8,      # 80% power
-            "mountain": 1.0,  # 100% power
-            "wasteland": 1.5, # 150% power
-            "tundra": 2.0     # 200% power (Hard)
+            "forest": 0.4,
+            "cave": 0.8,
+            "mountain": 1.0,
+            "wasteland": 1.5,
+            "tundra": 2.0
         }
         scale = difficulty_map.get(zone, 1.0)
         
@@ -736,8 +758,6 @@ async def get_random_encounter(zone: str = 'forest'):
         for i, m in enumerate(monsters):
             monster = dict(m)
             monster['encounter_id'] = f"enemy_{i}_{monster['id']}"
-            
-            # Apply map-based scaling to stats
             scaled_hp = int(monster['base_hp'] * scale)
             monster['base_hp'] = scaled_hp
             monster['current_hp'] = scaled_hp
@@ -745,19 +765,8 @@ async def get_random_encounter(zone: str = 'forest'):
             monster['base_vitality'] = int(monster['base_vitality'] * scale)
             monster['xp_reward'] = int(monster['xp_reward'] * scale)
             monster['current_mp'] = monster['base_mp']
-            
             encounter.append(monster)
         return encounter
-
-async def record_bestiary_encounter(player_id: int, monster_ids: list):
-    """Track that a player has encountered specific monsters."""
-    async with db_pool.acquire() as conn:
-        for mid in monster_ids:
-            await conn.execute('''
-                INSERT INTO player_bestiary (player_id, monster_id, encountered)
-                VALUES ($1, $2, TRUE)
-                ON CONFLICT (player_id, monster_id) DO NOTHING
-            ''', player_id, mid)
 
 # ==================== ALLY/CAPTURE ENDPOINTS ====================
 
@@ -803,7 +812,6 @@ async def capture_monster(data: CaptureRequest, request: Request):
         ally_dict = dict(ally)
         ally_dict['sprite'] = monster['sprite']
         
-        # Update bestiary - mark as captured
         await conn.execute('''
             INSERT INTO player_bestiary (player_id, monster_id, encountered, captured)
             VALUES ($1, $2, TRUE, TRUE)
@@ -889,7 +897,6 @@ async def get_player_abilities(request: Request):
             AND id NOT IN (SELECT ability_id FROM entity_abilities WHERE player_id = $2)
         ''', player['level'], player['id'])
         
-        # Get all locked abilities (above player level)
         locked = await conn.fetch('''
             SELECT * FROM abilities 
             WHERE required_level > $1
@@ -922,7 +929,38 @@ async def unlock_ability(ability_id: int, request: Request):
         await conn.execute('INSERT INTO entity_abilities (player_id, ability_id) VALUES ($1, $2)', player['id'], ability_id)
         return {"success": True, "ability": dict(ability)}
 
-# ==================== COMBAT ENDPOINTS ====================
+# ==================== GUILD & DUEL ENDPOINTS ====================
+
+@api_router.post("/guilds/create")
+async def create_guild(name: str, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, gold, guild_id FROM players WHERE user_id = $1', user['id'])
+        if player['guild_id']: raise HTTPException(status_code=400, detail="Already in a guild")
+        if player['gold'] < 10000: raise HTTPException(status_code=400, detail="Need 10,000G")
+        
+        guild_id = await conn.fetchval('INSERT INTO guilds (name, leader_id) VALUES ($1, $2) RETURNING id', name, player['id'])
+        await conn.execute('UPDATE players SET gold = gold - 10000, guild_id = $1 WHERE id = $2', guild_id, player['id'])
+        return {"success": True, "guild_id": guild_id}
+
+@api_router.post("/guilds/buy-buff")
+async def buy_guild_buff(buff_type: str, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, guild_id FROM players WHERE user_id = $1', user['id'])
+        guild = await conn.fetchrow('SELECT * FROM guilds WHERE id = $1 AND leader_id = $2', player['guild_id'], player['id'])
+        if not guild: raise HTTPException(status_code=403, detail="Only leaders can buy buffs")
+        
+        cost = 5000
+        if guild['bank_balance'] < cost: raise HTTPException(status_code=400, detail="Insufficient guild funds")
+        
+        expiry = datetime.now(timezone.utc) + timedelta(hours=2)
+        await conn.execute('''
+            UPDATE guilds SET bank_balance = bank_balance - $1, 
+            active_buff = $2, buff_expires_at = $3 WHERE id = $4
+        ''', cost, buff_type, expiry, guild['id'])
+        return {"success": True, "expires_at": expiry}
+
 @api_router.post("/combat/start-duel")
 async def start_duel(opponent_id: int, wager: int, request: Request):
     user = await get_current_user(request)
@@ -933,17 +971,12 @@ async def start_duel(opponent_id: int, wager: int, request: Request):
         if challenger['gold'] < wager or opponent['gold'] < wager:
             raise HTTPException(status_code=400, detail="Insufficient gold for wager")
 
-        # Deduct wager from both
         await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, challenger['id'])
         await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, opponent['id'])
 
-        # Get party data for both
         challenger_party = await get_player_party_data(challenger['id'], conn)
         opponent_party = await get_player_party_data(opponent['id'], conn)
 
-        # Notify both players via WebSocket
-        # CHALLENGER sees OPPONENT as enemies
-        # OPPONENT sees CHALLENGER as enemies
         duel_data_for_challenger = {
             "type": "pvp_start",
             "wager": wager,
@@ -962,6 +995,9 @@ async def start_duel(opponent_id: int, wager: int, request: Request):
         await manager.send_to(opponent['id'], duel_data_for_opponent)
 
         return {"success": True}
+
+# ==================== COMBAT ENDPOINTS ====================
+
 @api_router.post("/combat/victory")
 async def combat_victory(request: Request):
     body = await request.json()
@@ -975,7 +1011,6 @@ async def combat_victory(request: Request):
         if not player:
             raise HTTPException(status_code=404, detail="Player not found")
         
-        # 1. Level up and SKILL POINTS
         new_xp = player['xp'] + xp_gained
         level_ups = 0
         stat_points_gained = 0
@@ -988,18 +1023,16 @@ async def combat_victory(request: Request):
             new_level += 1
             level_ups += 1
             stat_points_gained += 5
-            skill_points_gained += 1 # NEW: 1 Skill Point per level
+            skill_points_gained += 1
             xp_to_next = int(xp_to_next * 1.5)
         
-        # 2. GUILD TAX LOGIC
         base_gold_per_kill = 20
         total_gold = len(defeated_monsters) * base_gold_per_kill
         tax_paid = 0
         
-        # Check if map is claimed
         zone_owner = await conn.fetchrow('SELECT id, name FROM guilds WHERE claimed_zone = $1', current_map)
         if zone_owner and player['guild_id'] != zone_owner['id']:
-            tax_paid = int(total_gold * 0.05) # 5% Intercepted
+            tax_paid = int(total_gold * 0.05)
             await conn.execute('''
                 UPDATE guilds SET bank_balance = bank_balance + $1, 
                 total_tax_collected = total_tax_collected + $1 WHERE id = $2
@@ -1020,7 +1053,6 @@ async def combat_victory(request: Request):
             WHERE id = $9
         ''', new_xp, new_level, xp_to_next, stat_points_gained, skill_points_gained, gold_earned, hp_bonus, mp_bonus, player['id'])
         
-        # Update quest progress and bestiary for defeated monsters
         for monster_id in defeated_monsters:
             await conn.execute('''
                 UPDATE player_quests pq SET progress = progress + 1
@@ -1028,14 +1060,12 @@ async def combat_victory(request: Request):
                 WHERE pq.quest_id = q.id AND pq.player_id = $1 AND q.required_monster_id = $2 AND pq.completed = FALSE
             ''', player['id'], monster_id)
             
-            # Update bestiary - increment times_defeated
             await conn.execute('''
                 INSERT INTO player_bestiary (player_id, monster_id, encountered, times_defeated)
                 VALUES ($1, $2, TRUE, 1)
                 ON CONFLICT (player_id, monster_id) DO UPDATE SET times_defeated = player_bestiary.times_defeated + 1
             ''', player['id'], monster_id)
         
-        # Give XP to party allies
         allies = await conn.fetch('SELECT * FROM captured_allies WHERE player_id = $1 AND in_party = TRUE', player['id'])
         ally_level_ups = []
         for ally in allies:
@@ -1166,7 +1196,6 @@ async def accept_friend(request_id: int, request: Request):
         
         await conn.execute("UPDATE friends SET status = 'accepted' WHERE id = $1", request_id)
         
-        # Create reverse friendship
         await conn.execute('''
             INSERT INTO friends (player_id, friend_player_id, status) VALUES ($1, $2, 'accepted')
             ON CONFLICT DO NOTHING
@@ -1361,10 +1390,8 @@ async def get_bestiary(request: Request):
         if not player:
             return {"monsters": [], "total": 0, "discovered": 0, "captured_count": 0}
         
-        # Get all monsters
         all_monsters = await conn.fetch('SELECT id, name, base_hp, base_mp, base_strength, base_agility, base_intelligence, base_vitality, sprite, zone, description, capture_rate, xp_reward FROM monsters ORDER BY id')
         
-        # Get player's bestiary entries
         bestiary = await conn.fetch('SELECT monster_id, encountered, captured, times_defeated, first_seen FROM player_bestiary WHERE player_id = $1', player['id'])
         bestiary_map = {b['monster_id']: dict(b) for b in bestiary}
         
@@ -1408,8 +1435,7 @@ async def record_encounter(request: Request):
             await record_bestiary_encounter(player['id'], monster_ids)
     return {"success": True}
 
-
-# ==================== WEBSOCKET & HELPERS ====================
+# ==================== WEBSOCKET ====================
 
 class ConnectionManager:
     def __init__(self):
@@ -1419,32 +1445,33 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, player_id: int):
         await websocket.accept()
         self.active_connections[player_id] = websocket
+        logger.info(f"Player {player_id} connected. Total: {len(self.active_connections)}")
     
     def disconnect(self, player_id: int):
         if player_id in self.active_connections:
             del self.active_connections[player_id]
         if player_id in self.player_data:
             del self.player_data[player_id]
+        logger.info(f"Player {player_id} disconnected")
     
     async def broadcast(self, message: dict):
+        disconnected = []
         for player_id, ws in self.active_connections.items():
-            try: await ws.send_text(json.dumps(message))
-            except: pass
-
+            try:
+                await ws.send_text(json.dumps(message))
+            except:
+                disconnected.append(player_id)
+        for pid in disconnected:
+            self.disconnect(pid)
+    
     async def send_to(self, player_id: int, message: dict):
         if player_id in self.active_connections:
-            try: await self.active_connections[player_id].send_text(json.dumps(message))
-            except: pass
+            try:
+                await self.active_connections[player_id].send_text(json.dumps(message))
+            except:
+                self.disconnect(player_id)
 
 manager = ConnectionManager()
-
-async def get_player_party_data(player_id: int, conn):
-    """Internal helper to get full party data for PvP."""
-    player_row = await conn.fetchrow('SELECT id, name, level, hp, max_hp, mp, max_mp, strength, agility, intelligence, vitality, sprite FROM players WHERE id = $1', player_id)
-    allies = await conn.fetch('SELECT ca.*, m.sprite FROM captured_allies ca JOIN monsters m ON ca.monster_id = m.id WHERE ca.player_id = $1 AND ca.in_party = TRUE', player_id)
-    party = [{"type": "player", "isEnemy": False, **dict(player_row)}]
-    for ally in allies: party.append({"type": "ally", "isEnemy": False, **dict(ally)})
-    return party
 
 @app.websocket("/api/ws/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, player_id: int):
@@ -1453,49 +1480,70 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
+            
             if msg.get('type') == 'position':
-                manager.player_data[player_id] = { 'id': player_id, 'name': msg.get('name', ''), 'x': msg.get('x', 0), 'y': msg.get('y', 0), 'current_map': msg.get('current_map', 'forest'), 'sprite': msg.get('sprite', 'player'), 'facing': msg.get('facing', 'right') }
+                manager.player_data[player_id] = {
+                    'id': player_id,
+                    'name': msg.get('name', ''),
+                    'x': msg.get('x', 0),
+                    'y': msg.get('y', 0),
+                    'current_map': msg.get('current_map', 'forest'),
+                    'sprite': msg.get('sprite', 'player'),
+                    'facing': msg.get('facing', 'right')
+                }
                 await manager.broadcast({"type": "positions", "players": manager.player_data})
+            
             elif msg.get('type') == 'chat':
-                await manager.broadcast({ "type": "chat", "sender_id": player_id, "sender_name": msg.get('name', 'Unknown'), "message": msg.get('message', ''), "channel": msg.get('channel', 'global') })
+                await manager.broadcast({
+                    "type": "chat",
+                    "sender_id": player_id,
+                    "sender_name": msg.get('name', 'Unknown'),
+                    "message": msg.get('message', ''),
+                    "channel": msg.get('channel', 'global')
+                })
+            
+            elif msg.get('type') == 'friend_request':
+                target_id = msg.get('target_id')
+                await manager.send_to(target_id, {
+                    "type": "friend_request",
+                    "from_id": player_id,
+                    "from_name": msg.get('name', 'Unknown')
+                })
+            
             elif msg.get('type') == 'duel_request':
                 target_id = msg.get('target_id')
                 wager = msg.get('payload', {}).get('wager', 0)
-                await manager.send_to(target_id, { "type": "duel_request", "from_id": player_id, "from_name": msg.get('name', 'Unknown'), "wager": wager })
+                await manager.send_to(target_id, {
+                    "type": "duel_request",
+                    "from_id": player_id,
+                    "from_name": msg.get('name', 'Unknown'),
+                    "wager": wager
+                })
+            
+            elif msg.get('type') == 'trade_request':
+                target_id = msg.get('target_id')
+                await manager.send_to(target_id, {
+                    "type": "trade_request",
+                    "from_id": player_id,
+                    "from_name": msg.get('name', 'Unknown')
+                })
+                
     except WebSocketDisconnect:
         manager.disconnect(player_id)
         await manager.broadcast({"type": "positions", "players": manager.player_data})
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        manager.disconnect(player_id)
 
-# ==================== NEW GAME ENDPOINTS ====================
+# ==================== ROOT ====================
 
-@api_router.post("/guilds/create")
-async def create_guild(name: str, request: Request):
-    user = await get_current_user(request)
-    async with db_pool.acquire() as conn:
-        player = await conn.fetchrow('SELECT id, gold, guild_id FROM players WHERE user_id = $1', user['id'])
-        if player['guild_id']: raise HTTPException(status_code=400, detail="Already in a guild")
-        if player['gold'] < 10000: raise HTTPException(status_code=400, detail="Need 10,000G")
-        guild_id = await conn.fetchval('INSERT INTO guilds (name, leader_id) VALUES ($1, $2) RETURNING id', name, player['id'])
-        await conn.execute('UPDATE players SET gold = gold - 10000, guild_id = $1 WHERE id = $2', guild_id, player['id'])
-        return {"success": True, "guild_id": guild_id}
+@api_router.get("/")
+async def root():
+    return {"message": "Game Engine API", "version": "2.0.0"}
 
-@api_router.post("/combat/start-duel")
-async def start_duel(opponent_id: int, wager: int, request: Request):
-    user = await get_current_user(request)
-    async with db_pool.acquire() as conn:
-        challenger = await conn.fetchrow('SELECT id, gold FROM players WHERE user_id = $1', user['id'])
-        opponent = await conn.fetchrow('SELECT id, gold FROM players WHERE id = $1', opponent_id)
-        if challenger['gold'] < wager or opponent['gold'] < wager:
-            raise HTTPException(status_code=400, detail="Insufficient gold for wager")
-        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, challenger['id'])
-        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, opponent['id'])
-        c_party = await get_player_party_data(challenger['id'], conn)
-        o_party = await get_player_party_data(opponent['id'], conn)
-        await manager.send_to(challenger['id'], {"type": "pvp_start", "wager": wager, "party": c_party, "enemies": [dict(p, isEnemy=True) for p in o_party]})
-        await manager.send_to(opponent['id'], {"type": "pvp_start", "wager": wager, "party": o_party, "enemies": [dict(p, isEnemy=True) for p in c_party]})
-        return {"success": True}
-
-# ==================== RUN SERVER ====================
+@api_router.get("/health")
+async def health():
+    return {"status": "healthy", "database": db_pool is not None}
 
 app.include_router(api_router)
 
