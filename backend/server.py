@@ -398,8 +398,12 @@ api_router = APIRouter(prefix="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[FRONTEND_URL, "http://localhost:3000"],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=[
+        FRONTEND_URL, 
+        "https://frontend-production-86c4.up.railway.app",
+        "http://localhost:3000"
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.up\.railway\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
