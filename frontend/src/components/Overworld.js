@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useGame } from '../contexts/GameContext';
-
+ 
 // Map definitions
 const MAPS = {
   forest: {
@@ -26,9 +26,9 @@ const MAPS = {
     ],
     spawnX: 100,
     spawnY: 400,
-    noEncounters: true, // Forest is now safe
+    noEncounters: true,
   },
-wasteland: {
+  wasteland: {
     name: 'The Dead Wasteland',
     bgGradient: ['#4a4e69', '#22223b', '#000000'],
     platforms: [
@@ -45,7 +45,7 @@ wasteland: {
     spawnY: 400,
     encounterZone: 'mountain',
   },
- tundra: {
+  tundra: {
     name: 'Frozen Tundra',
     bgGradient: ['#e0f2fe', '#bae6fd', '#7dd3fc'],
     platforms: [
@@ -83,7 +83,7 @@ wasteland: {
     spawnY: 400,
     encounterZone: 'cave',
   },
-   mountain: {
+  mountain: {
     name: 'Rocky Mountain',
     bgGradient: ['#ffa07a', '#ffc0cb', '#dda0dd'],
     platforms: [
@@ -154,7 +154,7 @@ wasteland: {
     ],
     spawnX: 80,
     spawnY: 400,
-    encounterZone: 'mountain', // High level enemies
+    encounterZone: 'mountain',
   },
   sunken_citadel: {
     name: 'Sunken Citadel',
@@ -173,27 +173,27 @@ wasteland: {
     ],
     spawnX: 100,
     spawnY: 480,
-    encounterZone: 'tundra', // Very high level enemies
+    encounterZone: 'tundra',
   },
 };
-
+ 
 const GRAVITY = 0.6;
 const JUMP_FORCE = -14;
 const MOVE_SPEED = 5;
-const ENCOUNTER_STEPS = 15; // Fewer steps needed
-const ENCOUNTER_CHANCE = 0.25; // Higher chance of encounter
+const ENCOUNTER_STEPS = 15;
+const ENCOUNTER_CHANCE = 0.25;
 const AUTO_SAVE_INTERVAL = 5000;
-
+ 
 export const Overworld = () => {
   const canvasRef = useRef(null);
   const audioRef = useRef(new Audio());
   const [isMuted, setIsMuted] = useState(true);
-
+ 
   const { 
     player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
     chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
     interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest,
-    spendSkillPoint // Import the new Skill Tree function
+    spendSkillPoint
   } = useGame();
   
   const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
@@ -222,7 +222,7 @@ export const Overworld = () => {
   
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
-
+ 
   // Background Music Mapping
   const MAP_MUSIC = useMemo(() => ({
     forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
@@ -236,7 +236,7 @@ export const Overworld = () => {
     lava_forge: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
     mystic_grove: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3',
   }), []);
-
+ 
   // Handle Music Switching
   useEffect(() => {
     const audio = audioRef.current;
@@ -250,17 +250,16 @@ export const Overworld = () => {
     }
     return () => audio.pause();
   }, [currentMap, isMuted, MAP_MUSIC]);
-  const lastSaveRef = useRef(Date.now());
-
-  // NEW: Day/Night Cycle Timer (1 game day = 10 real minutes)
+ 
+  // Day/Night Cycle Timer
   useEffect(() => {
     const timer = setInterval(() => {
-      setGameTime(prev => (prev + 1) % 600); // 600 seconds = 10 mins
+      setGameTime(prev => (prev + 1) % 600);
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // NEW: Global Menu Keybinds
+ 
+  // Global Menu Keybinds
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key.toLowerCase() === 'i') setShowInventory(prev => !prev);
@@ -270,9 +269,9 @@ export const Overworld = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
+ 
   const mapData = MAPS[currentMap];
-
+ 
   // Load saved position
   useEffect(() => {
     if (player) {
@@ -284,7 +283,7 @@ export const Overworld = () => {
       }));
     }
   }, [player]);
-
+ 
   // Auto-save position and map
   useEffect(() => {
     const saveInterval = setInterval(() => {
@@ -295,22 +294,22 @@ export const Overworld = () => {
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(saveInterval);
   }, [player, playerState, updatePosition, currentMap]);
-
+ 
   // Save on map change
   useEffect(() => {
     if (player) {
       updatePosition(playerState.x, playerState.y, currentMap);
     }
   }, [currentMap, player, playerState.x, playerState.y, updatePosition]);
-
+ 
   // Fetch NPCs when entering village
   useEffect(() => {
     if (currentMap === 'village') {
       fetchNpcs('village');
     }
   }, [currentMap, fetchNpcs]);
-
-  // Keyboard input - WASD + Interact (E)
+ 
+  // Keyboard input
   useEffect(() => {
     const handleKeyDown = (e) => {
       const key = e.key.toLowerCase();
@@ -320,7 +319,6 @@ export const Overworld = () => {
       }
       if (key === 'enter' && !npcDialog) {
         if (showChat) {
-          // Send message
           if (chatInput.trim()) {
             sendChatMessage(chatInput.trim());
             setChatInput('');
@@ -352,13 +350,12 @@ export const Overworld = () => {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [showChat, chatInput, sendChatMessage, setGameState, healParty, updatePosition, playerState, currentMap, npcDialog]);
-
+ 
   const checkExits = useCallback((x, y, keys) => {
     const playerWidth = 40; const playerHeight = 56;
     for (const exit of mapData.exits) {
       if (x + playerWidth > exit.x && x < exit.x + exit.width &&
           y + playerHeight > exit.y && y < exit.y + exit.height) {
-        // NEW: Only trigger if STANDING on the exit AND pressing 'E'
         if (keys['e']) {
           const newMap = MAPS[exit.to];
           updatePosition(newMap.spawnX, newMap.spawnY, exit.to);
@@ -370,7 +367,7 @@ export const Overworld = () => {
     }
     return false;
   }, [mapData, updatePosition]);
-  // Random encounter
+ 
   const checkEncounter = useCallback(async () => {
     if (mapData.noEncounters) return;
     if (Math.random() < ENCOUNTER_CHANCE) {
@@ -378,8 +375,7 @@ export const Overworld = () => {
       await startEncounter(mapData.encounterZone || 'forest');
     }
   }, [startEncounter, updatePosition, playerState.x, playerState.y, mapData, currentMap]);
-
-  // Check NPC interaction
+ 
   const checkNpcInteraction = useCallback(() => {
     if (!mapData.npcs) return null;
     const playerWidth = 40;
@@ -391,7 +387,7 @@ export const Overworld = () => {
     }
     return null;
   }, [mapData, playerState]);
-
+ 
   // Game loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -451,7 +447,6 @@ export const Overworld = () => {
             }
           }
           
-          // Pass keys to checkExits so it knows if 'E' is pressed
           checkExits(x, y, keys);
           x = Math.max(0, Math.min(x, canvas.width - playerWidth));
           if (y > canvas.height) { y = 100; vy = 0; }
@@ -466,7 +461,7 @@ export const Overworld = () => {
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
   }, [checkEncounter, checkExits, mapData, npcDialog]);
-
+ 
   // Send position
   useEffect(() => {
     const interval = setInterval(() => {
@@ -474,15 +469,13 @@ export const Overworld = () => {
     }, 50);
     return () => clearInterval(interval);
   }, [playerState.x, playerState.y, playerState.facing, sendPosition, currentMap]);
-
-  // Handle canvas click with scaling correction
+ 
+  // Handle canvas click
   const handleCanvasClick = async (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    // Normalize coordinates based on internal resolution (1000x600)
     const clickX = (e.clientX - rect.left) * (1000 / rect.width);
     const clickY = (e.clientY - rect.top) * (600 / rect.height);
     
-    // Check NPC click
     if (mapData.npcs) {
       for (const npc of mapData.npcs) {
         if (clickX >= npc.x - 25 && clickX <= npc.x + 25 && clickY >= npc.y - 60 && clickY <= npc.y + 10) {
@@ -498,7 +491,6 @@ export const Overworld = () => {
       }
     }
     
-    // Check other player click
     for (const [id, other] of Object.entries(otherPlayers)) {
       if (other.current_map === currentMap &&
           clickX >= other.x && clickX <= other.x + 40 &&
@@ -511,7 +503,7 @@ export const Overworld = () => {
     
     setShowEntityMenu(false);
   };
-
+ 
   // Draw functions
   const drawCloud = (ctx, x, y) => {
     ctx.fillStyle = '#ffffff';
@@ -523,7 +515,7 @@ export const Overworld = () => {
     ctx.fill();
     ctx.globalAlpha = 1;
   };
-
+ 
   const drawTree = (ctx, x, y) => {
     ctx.fillStyle = '#8B4513';
     ctx.fillRect(x + 15, y, 20, 40);
@@ -536,14 +528,14 @@ export const Overworld = () => {
     ctx.arc(x + 25, y - 25, 22, 0, Math.PI * 2);
     ctx.fill();
   };
-
+ 
   const drawBush = (ctx, x, y) => {
     ctx.fillStyle = '#228B22';
     ctx.beginPath();
     ctx.arc(x + 15, y + 10, 18, 0, Math.PI * 2);
     ctx.fill();
   };
-
+ 
   const drawStalactite = (ctx, x, y) => {
     ctx.fillStyle = '#666';
     ctx.beginPath();
@@ -553,17 +545,14 @@ export const Overworld = () => {
     ctx.closePath();
     ctx.fill();
   };
-
+ 
   const drawNPC = useCallback((ctx, npc) => {
-    // Body
     ctx.fillStyle = npc.type === 'healer' ? '#ff69b4' : npc.type === 'shop' ? '#ffd700' : '#9370db';
     ctx.fillRect(npc.x - 12, npc.y - 30, 24, 30);
-    // Head
     ctx.fillStyle = '#ffd9b3';
     ctx.beginPath();
     ctx.arc(npc.x, npc.y - 42, 12, 0, Math.PI * 2);
     ctx.fill();
-    // Name
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 2;
@@ -571,14 +560,13 @@ export const Overworld = () => {
     ctx.textAlign = 'center';
     ctx.strokeText(npc.name, npc.x, npc.y - 58);
     ctx.fillText(npc.name, npc.x, npc.y - 58);
-    // Interaction hint
     const nearNpc = checkNpcInteraction();
     if (nearNpc && nearNpc.id === npc.id) {
       ctx.fillStyle = '#ffd700';
       ctx.fillText('[Click to talk]', npc.x, npc.y - 68);
     }
   }, [checkNpcInteraction]);
-
+ 
   const drawPlayer = (ctx, x, y, facing, frame, name, isMain = true) => {
     const flip = facing === 'left' ? -1 : 1;
     ctx.save();
@@ -612,7 +600,7 @@ export const Overworld = () => {
     ctx.strokeText(name, x + 20, y - 8);
     ctx.fillText(name, x + 20, y - 8);
   };
-
+ 
   // Render
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -620,7 +608,6 @@ export const Overworld = () => {
     
     const ctx = canvas.getContext('2d');
     
-    // Background
     const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     mapData.bgGradient.forEach((color, i) => {
       skyGradient.addColorStop(i / (mapData.bgGradient.length - 1), color);
@@ -628,7 +615,6 @@ export const Overworld = () => {
     ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Decorations
     mapData.decorations.forEach(dec => {
       if (dec.type === 'cloud') drawCloud(ctx, dec.x, dec.y);
       if (dec.type === 'tree') drawTree(ctx, dec.x, dec.y);
@@ -636,7 +622,6 @@ export const Overworld = () => {
       if (dec.type === 'stalactite') drawStalactite(ctx, dec.x, dec.y);
     });
     
-    // Platforms
     mapData.platforms.forEach(platform => {
       if (platform.type === 'ground') {
         ctx.fillStyle = '#8B4513';
@@ -654,7 +639,6 @@ export const Overworld = () => {
       }
     });
     
-    // Exits
     mapData.exits.forEach(exit => {
       ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
       ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
@@ -663,7 +647,6 @@ export const Overworld = () => {
       ctx.textAlign = 'center';
       ctx.fillText(exit.label, exit.x + exit.width / 2, exit.y - 5);
       
-      // Flash [E] hint if overlapping
       const pWidth = 40; const pHeight = 56;
       if (playerState.x + pWidth > exit.x && playerState.x < exit.x + exit.width &&
           playerState.y + pHeight > exit.y && playerState.y < exit.y + exit.height) {
@@ -672,23 +655,20 @@ export const Overworld = () => {
       }
     });
     
-    // NPCs
     if (mapData.npcs) {
       mapData.npcs.forEach(npc => drawNPC(ctx, npc));
     }
     
-    // Other players (same map only)
     Object.values(otherPlayers).forEach(other => {
       if (other.current_map === currentMap) {
         drawPlayer(ctx, other.x, other.y, other.facing || 'right', 0, other.name, false);
       }
     });
     
-    // Player
     drawPlayer(ctx, playerState.x, playerState.y, playerState.facing, playerState.frame, player?.name || 'Player', true);
     
   }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction, drawNPC]);
-
+ 
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>
       <rect x="24" y="36" width="16" height="20" fill="#4a90d9"/>
@@ -698,7 +678,7 @@ export const Overworld = () => {
       <circle cx="36" cy="24" r="2" fill="#000"/>
     </svg>
   );
-
+ 
   return (
     <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-900 relative" data-testid="overworld">
       {/* HUD */}
@@ -738,50 +718,48 @@ export const Overworld = () => {
           </div>
         </div>
       </div>
-
+ 
       {/* Map name & Territory Control */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-10 pointer-events-none">
         <div className="bg-slate-900/90 px-6 py-1 rounded-lg border-2 border-slate-600 shadow-xl">
           <span className="text-white font-black tracking-wider text-sm">{mapData.name}</span>
         </div>
-        {/* Placeholder Guild Claim - Can be hooked to backend later */}
         {currentMap === 'tundra' && (
            <div className="bg-amber-900/90 px-4 py-0.5 rounded-b-lg border-b-2 border-x-2 border-amber-500 text-[10px] text-amber-400 font-bold tracking-widest mt-[-2px] shadow-lg animate-pulse">
              🛡️ CLAIMED BY: APEX LEGION 🛡️
            </div>
         )}
       </div>
-
-      {/* NEW: Skill Tree Modal (Path of Exile Style) */}
+ 
+      {/* Skill Tree Modal */}
       {showSkillTree && (
         <div className="absolute inset-8 bg-slate-950 border-4 border-amber-500 rounded-2xl z-50 p-6 flex flex-col shadow-[0_0_50px_rgba(245,158,11,0.2)]">
            <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl text-amber-400 font-black uppercase tracking-widest">Skill Tree</h2>
-              <div className="text-white bg-slate-800 px-4 py-1 rounded-full font-bold">Unspent Points: <span className="text-amber-400 text-lg">{player?.skill_points || 3}</span></div>
+              <div className="text-white bg-slate-800 px-4 py-1 rounded-full font-bold">Unspent Points: <span className="text-amber-400 text-lg">{player?.skill_points || 0}</span></div>
            </div>
            <div className="flex-1 relative bg-slate-900 rounded-xl overflow-hidden border-2 border-slate-700 p-8">
-              {/* SVG lines connecting nodes */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none">
                  <line x1="50%" y1="20%" x2="30%" y2="50%" stroke="#475569" strokeWidth="6" />
                  <line x1="50%" y1="20%" x2="70%" y2="50%" stroke="#475569" strokeWidth="6" />
                  <line x1="30%" y1="50%" x2="50%" y2="80%" stroke="#1e293b" strokeWidth="6" />
               </svg>
-              {/* Core Node */}
               <div className="absolute top-[20%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
                  <button 
-                   onClick={async () => { await axios.post(`${API}/player/skill-tree/spend?node_type=crit`, {}, { headers: getAuthHeader() }); fetchPlayer(); }}
+                   onClick={() => spendSkillPoint && spendSkillPoint('crit')}
                    className="w-20 h-20 bg-gradient-to-br from-amber-600 to-amber-900 border-4 border-amber-400 rounded-full text-3xl shadow-[0_0_20px_rgba(245,158,11,0.6)] hover:scale-110 transition-all">⚔️</button>
                  <span className="text-amber-400 text-xs mt-2 font-black tracking-wider bg-black/50 px-2 py-1 rounded">+2 STR</span>
               </div>
-              {/* Branch Nodes */}
               <div className="absolute top-[50%] left-[30%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
                  <button 
-                   onClick={async () => { await axios.post(`${API}/player/skill-tree/spend?node_type=hp`, {}, { headers: getAuthHeader() }); fetchPlayer(); }}
+                   onClick={() => spendSkillPoint && spendSkillPoint('hp')}
                    className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">❤️</button>
                  <span className="text-white text-[10px] mt-2 font-bold bg-black/50 px-2 py-1 rounded">+20 MAX HP</span>
               </div>
               <div className="absolute top-[50%] left-[70%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                 <button className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">🌪️</button>
+                 <button 
+                   onClick={() => spendSkillPoint && spendSkillPoint('cleave')}
+                   className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">🌪️</button>
                  <span className="text-white text-[10px] mt-2 font-bold bg-black/50 px-2 py-1 rounded">CLEAVE (HIT 2)</span>
               </div>
               <div className="absolute top-[80%] left-[50%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
@@ -792,7 +770,8 @@ export const Overworld = () => {
            <button onClick={() => setShowSkillTree(false)} className="mt-4 bg-slate-800 text-white font-bold py-3 rounded-lg hover:bg-slate-700 border border-slate-600 uppercase tracking-widest">Close Tree (K)</button>
         </div>
       )}
-{/* NEW: Duel Wager Setup Modal */}
+ 
+      {/* Duel Wager Setup Modal */}
       {duelSetup && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-950 border-4 border-red-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(239,68,68,0.3)] flex flex-col">
            <h2 className="text-xl text-red-400 font-black uppercase tracking-widest text-center mb-2">Challenge {duelSetup.target.name}</h2>
@@ -815,7 +794,8 @@ export const Overworld = () => {
            </div>
         </div>
       )}
-      {/* NEW: Guilds Menu (Upgraded) */}
+ 
+      {/* Guilds Menu */}
       {showGuildMenu && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[450px] bg-slate-950 border-4 border-indigo-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(99,102,241,0.3)] flex flex-col">
            <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
@@ -824,9 +804,7 @@ export const Overworld = () => {
                 <div className="text-white text-xs font-bold bg-slate-800 px-3 py-1 rounded">Bank: <span className="text-amber-400">14,250 G</span></div>
               </div>
            </div>
-           
            <div className="space-y-4">
-              {/* Tax Stats */}
               <div className="bg-slate-900 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
                  <div>
                    <div className="text-amber-400 font-bold text-xs uppercase tracking-wider">Passive Income</div>
@@ -837,13 +815,9 @@ export const Overworld = () => {
                    <div className="text-slate-500 text-[9px]">Total Generated This Week</div>
                  </div>
               </div>
-
-              {/* Guild Perks (Spending the Gold) */}
               <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
                  <h3 className="text-indigo-400 font-bold text-xs uppercase mb-3">Guild Perks & Upgrades</h3>
-                 
                  <div className="space-y-2">
-                   {/* Perk 1 */}
                    <div className="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-600 hover:border-amber-400 transition-colors">
                      <div className="flex items-center gap-3">
                        <span className="text-2xl">⚡</span>
@@ -852,12 +826,8 @@ export const Overworld = () => {
                          <div className="text-slate-400 text-[10px]">+10% XP for all members (2 hours)</div>
                        </div>
                      </div>
-                     <button className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-1 px-3 rounded text-[10px] shadow-lg">
-                       BUY (2,000G)
-                     </button>
+                     <button className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-1 px-3 rounded text-[10px] shadow-lg">BUY (2,000G)</button>
                    </div>
-
-                   {/* Perk 2 */}
                    <div className="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-600 hover:border-amber-400 transition-colors">
                      <div className="flex items-center gap-3">
                        <span className="text-2xl">💰</span>
@@ -866,34 +836,29 @@ export const Overworld = () => {
                          <div className="text-slate-400 text-[10px]">Increase Map Tax to 7%</div>
                        </div>
                      </div>
-                     <button className="bg-slate-700 text-slate-400 font-bold py-1 px-3 rounded text-[10px] cursor-not-allowed">
-                       LOCKED (10,000G)
-                     </button>
+                     <button className="bg-slate-700 text-slate-400 font-bold py-1 px-3 rounded text-[10px] cursor-not-allowed">LOCKED (10,000G)</button>
                    </div>
                  </div>
               </div>
-
-              {/* Territory Control */}
               <div className="bg-slate-900 p-3 rounded-lg border border-slate-700">
                  <h3 className="text-amber-400 font-bold text-xs uppercase mb-2 border-b border-slate-700 pb-1">Territory Control</h3>
                  <div className="flex justify-between text-xs text-white my-1"><span>Tundra:</span><span className="text-amber-400">Apex Legion</span></div>
                  <div className="flex justify-between text-xs text-white my-1"><span>Lava Forge:</span><span className="text-slate-500">Unclaimed</span></div>
               </div>
            </div>
-           
            <button onClick={() => setShowGuildMenu(false)} className="mt-4 bg-slate-800 text-white font-bold py-2 rounded-lg hover:bg-slate-700 border border-slate-600 uppercase tracking-widest text-xs">Close Registry (G)</button>
         </div>
       )}
-
-      {/* NEW: Day/Night Visual Overlay */}
+ 
+      {/* Day/Night Visual Overlay */}
       <div className={`absolute inset-0 pointer-events-none transition-colors duration-1000 z-0
         ${gameTime > 300 && gameTime < 450 ? 'bg-orange-900/20' : ''} 
         ${gameTime >= 450 ? 'bg-blue-950/40' : ''}`} 
       />
-
-      {/* NEW: Quest Tracker HUD (Only visible if you have active quests) */}
+ 
+      {/* Quest Tracker HUD */}
       {quests?.active?.length > 0 && (
-        <div className="absolute top-4 right-4 w-64 bg-black/50 border border-slate-700/50 rounded-lg p-3 z-10 backdrop-blur-sm pointer-events-none shadow-lg">
+        <div className="absolute top-32 right-4 w-64 bg-black/50 border border-slate-700/50 rounded-lg p-3 z-10 backdrop-blur-sm pointer-events-none shadow-lg">
           <h3 className="text-amber-400 font-bold text-[10px] tracking-widest uppercase mb-2 border-b border-slate-700 pb-1">Active Quests</h3>
           {quests.active.map(q => (
             <div key={q.id} className="text-white text-[10px] mb-1 flex justify-between">
@@ -903,8 +868,8 @@ export const Overworld = () => {
           ))}
         </div>
       )}
-
-      {/* NEW: Diablo-style Inventory Modal */}
+ 
+      {/* Inventory Modal */}
       {showInventory && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-900 border-4 border-slate-700 rounded-xl z-50 p-4 shadow-2xl flex flex-col">
           <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
@@ -912,21 +877,15 @@ export const Overworld = () => {
             <button onClick={() => setShowInventory(false)} className="text-white hover:text-red-500 font-bold">X</button>
           </div>
           <div className="grid grid-cols-4 gap-2 flex-1 overflow-y-auto">
-            {player?.inventory?.length > 0 ? player.inventory.map((item, idx) => (
-              <div key={idx} className={`aspect-square bg-slate-800 border-2 rounded flex items-center justify-center cursor-pointer hover:bg-slate-700 ${item.rarity === 'legendary' ? 'border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]' : 'border-slate-600'}`}>
-                <span className="text-[10px] text-center text-white">{item.name}</span>
-              </div>
-            )) : (
-              <div className="col-span-4 text-center text-slate-500 text-sm mt-10">Your bag is empty. Go hunt!</div>
-            )}
+            <div className="col-span-4 text-center text-slate-500 text-sm mt-10">Your bag is empty. Go hunt!</div>
           </div>
         </div>
       )}
-
-      {/* Notifications - Top Right with Slide-in Animation */}
+ 
+      {/* Notifications */}
       <div className="absolute top-32 right-4 flex flex-col gap-2 z-50 pointer-events-none">
         {notifications.map((n, i) => (
-          <div key={n.id || i} className="w-64 bg-slate-900/95 border-l-4 border-amber-500 p-3 shadow-2xl transition-all duration-500 animate-in fade-in slide-in-from-right-8 pointer-events-auto">
+          <div key={n.id || i} className="w-64 bg-slate-900/95 border-l-4 border-amber-500 p-3 shadow-2xl pointer-events-auto">
             <div className="text-amber-400 font-bold text-[10px] uppercase tracking-widest">{n.type.replace('_', ' ')}</div>
             <div className="text-white text-xs my-1">{n.from_name} wants to interact.</div>
             <div className="flex gap-1 mt-2">
@@ -936,7 +895,7 @@ export const Overworld = () => {
           </div>
         ))}
       </div>
-
+ 
       {/* Controls & Sound */}
       <div className="absolute top-4 right-4 flex gap-2">
         <button 
@@ -949,7 +908,7 @@ export const Overworld = () => {
           <span className="text-amber-400">WASD</span>: Move | <span className="text-amber-400">M</span>: Menu
         </div>
       </div>
-
+ 
       {/* Canvas */}
       <canvas
         ref={canvasRef}
@@ -959,8 +918,8 @@ export const Overworld = () => {
         onClick={handleCanvasClick}
         data-testid="game-canvas"
       />
-
-      {/* Chat - Raised for better visibility on iPad */}
+ 
+      {/* Chat */}
       <div className="absolute bottom-16 left-4 w-72">
         <div className="bg-slate-900/90 border border-slate-600 rounded-lg overflow-hidden">
           <div className="bg-slate-800 px-2 py-1 text-xs text-slate-300 flex justify-between">
@@ -989,7 +948,7 @@ export const Overworld = () => {
           </div>
         </div>
       </div>
-
+ 
       {/* Player Menu */}
       {showEntityMenu && selectedEntity?.type === 'player' && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border-2 border-amber-400 rounded-xl p-4 z-20 min-w-[180px]">
@@ -1017,7 +976,7 @@ export const Overworld = () => {
           </div>
         </div>
       )}
-
+ 
       {/* NPC Dialog */}
       {npcDialog && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border-2 border-amber-400 rounded-xl p-4 z-20 min-w-[280px] max-w-sm">
@@ -1095,5 +1054,5 @@ export const Overworld = () => {
     </div>
   );
 };
-
+ 
 export default Overworld;
