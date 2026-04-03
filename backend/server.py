@@ -678,6 +678,34 @@ async def heal_player(request: Request):
             await conn.execute('UPDATE captured_allies SET hp = max_hp, mp = max_mp WHERE player_id = $1', player['id'])
         return {"success": True}
 
+
+
+
+@api_router.post("/player/skill-tree/spend")
+async def spend_skill_point(node_type: str, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('SELECT id, skill_points, max_hp, strength FROM players WHERE user_id = $1', user['id'])
+        
+        if player['skill_points'] <= 0:
+            raise HTTPException(status_code=400, detail="No skill points available")
+            
+        if node_type == 'hp':
+            # +20 Max HP per point
+            await conn.execute('UPDATE players SET max_hp = max_hp + 20, hp = hp + 20, skill_points = skill_points - 1 WHERE id = $1', player['id'])
+        elif node_type == 'crit':
+            # We will handle crit chance in the CombatScreen.js logic based on a new 'crit_chance' column
+            # For now, let's boost Strength by 2 as a placeholder for the crit node
+            await conn.execute('UPDATE players SET strength = strength + 2, skill_points = skill_points - 1 WHERE id = $1', player['id'])
+        elif node_type == 'cleave':
+            # Mark a new boolean column 'can_cleave' as True
+            await conn.execute('UPDATE players SET skill_points = skill_points - 1 WHERE id = $1', player['id'])
+            
+        return {"success": True, "message": f"Upgraded {node_type}!"}
+
+
+
+
 # ==================== MONSTER ENDPOINTS ====================
 
 @api_router.get("/monsters")
@@ -895,7 +923,45 @@ async def unlock_ability(ability_id: int, request: Request):
         return {"success": True, "ability": dict(ability)}
 
 # ==================== COMBAT ENDPOINTS ====================
+@api_router.post("/combat/start-duel")
+async def start_duel(opponent_id: int, wager: int, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        challenger = await conn.fetchrow('SELECT id, gold, name FROM players WHERE user_id = $1', user['id'])
+        opponent = await conn.fetchrow('SELECT id, gold, name FROM players WHERE id = $1', opponent_id)
+        
+        if challenger['gold'] < wager or opponent['gold'] < wager:
+            raise HTTPException(status_code=400, detail="Insufficient gold for wager")
 
+        # Deduct wager from both
+        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, challenger['id'])
+        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, opponent['id'])
+
+        # Get party data for both
+        challenger_party = await get_player_party_data(challenger['id'], conn)
+        opponent_party = await get_player_party_data(opponent['id'], conn)
+
+        # Notify both players via WebSocket
+        # CHALLENGER sees OPPONENT as enemies
+        # OPPONENT sees CHALLENGER as enemies
+        duel_data_for_challenger = {
+            "type": "pvp_start",
+            "wager": wager,
+            "party": challenger_party,
+            "enemies": [dict(p, isEnemy=True) for p in opponent_party]
+        }
+        
+        duel_data_for_opponent = {
+            "type": "pvp_start",
+            "wager": wager,
+            "party": opponent_party,
+            "enemies": [dict(p, isEnemy=True) for p in challenger_party]
+        }
+
+        await manager.send_to(challenger['id'], duel_data_for_challenger)
+        await manager.send_to(opponent['id'], duel_data_for_opponent)
+
+        return {"success": True}
 @api_router.post("/combat/victory")
 async def combat_victory(request: Request):
     body = await request.json()
@@ -1343,7 +1409,7 @@ async def record_encounter(request: Request):
     return {"success": True}
 
 
-# ==================== WEBSOCKET ====================
+# ==================== WEBSOCKET = : ====================
 
 class ConnectionManager:
     def __init__(self):
@@ -1420,10 +1486,13 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
             
             elif msg.get('type') == 'duel_request':
                 target_id = msg.get('target_id')
+                # NEW: Extract wager from the websocket message payload
+                wager = msg.get('payload', {}).get('wager', 0)
                 await manager.send_to(target_id, {
                     "type": "duel_request",
                     "from_id": player_id,
-                    "from_name": msg.get('name', 'Unknown')
+                    "from_name": msg.get('name', 'Unknown'),
+                    "wager": wager
                 })
             
             elif msg.get('type') == 'trade_request':
@@ -1441,23 +1510,31 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(player_id)
 
-# ==================== ROOT ====================
+# ==================== PVP & GUILD HELPERS ====================
 
-@api_router.get("/")
-async def root():
-    return {"message": "Game Engine API", "version": "2.0.0"}
+async def get_player_party_data(player_id: int, conn):
+    """Internal helper to get full party data for PvP."""
+    player_row = await conn.fetchrow('''
+        SELECT id, name, level, hp, max_hp, mp, max_mp, strength, agility, intelligence, vitality, sprite
+        FROM players WHERE id = $1
+    ''', player_id)
+    
+    allies = await conn.fetch('''
+        SELECT ca.id, ca.name, ca.level, ca.hp, ca.max_hp, ca.mp, ca.max_mp, 
+               ca.strength, ca.agility, ca.intelligence, ca.vitality, m.sprite
+        FROM captured_allies ca
+        JOIN monsters m ON ca.monster_id = m.id
+        WHERE ca.player_id = $1 AND ca.in_party = TRUE
+        ORDER BY ca.party_slot
+    ''', player_id)
+    
+    party = [{"type": "player", "isEnemy": False, **dict(player_row)}]
+    for ally in allies:
+        party.append({"type": "ally", "isEnemy": False, **dict(ally)})
+    return party
 
-@api_router.get("/health")
-async def health():
-    return {"status": "healthy", "database": db_pool is not None}
+# ==================== NEW GAME ENDPOINTS ====================
 
-app.include_router(api_router)
-
-if __name__ == "__main__":
-    import uvicorn
-    # Railway provides the port via an environment variable
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
 @api_router.post("/guilds/create")
 async def create_guild(name: str, request: Request):
     user = await get_current_user(request)
@@ -1481,9 +1558,64 @@ async def buy_guild_buff(buff_type: str, request: Request):
         cost = 5000
         if guild['bank_balance'] < cost: raise HTTPException(status_code=400, detail="Insufficient guild funds")
         
-        expiry = datetime.now() + timedelta(hours=2)
+        expiry = datetime.now(timezone.utc) + timedelta(hours=2)
         await conn.execute('''
             UPDATE guilds SET bank_balance = bank_balance - $1, 
             active_buff = $2, buff_expires_at = $3 WHERE id = $4
         ''', cost, buff_type, expiry, guild['id'])
         return {"success": True, "expires_at": expiry}
+
+@api_router.post("/combat/start-duel")
+async def start_duel(opponent_id: int, wager: int, request: Request):
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        challenger = await conn.fetchrow('SELECT id, gold, name FROM players WHERE user_id = $1', user['id'])
+        opponent = await conn.fetchrow('SELECT id, gold, name FROM players WHERE id = $1', opponent_id)
+        
+        if challenger['gold'] < wager or opponent['gold'] < wager:
+            raise HTTPException(status_code=400, detail="Insufficient gold for wager")
+
+        # Deduct wager from both
+        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, challenger['id'])
+        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', wager, opponent['id'])
+
+        # Get party data for both
+        challenger_party = await get_player_party_data(challenger['id'], conn)
+        opponent_party = await get_player_party_data(opponent['id'], conn)
+
+        # Notify both players via WebSocket
+        duel_data_for_challenger = {
+            "type": "pvp_start",
+            "wager": wager,
+            "party": challenger_party,
+            "enemies": [dict(p, isEnemy=True) for p in opponent_party]
+        }
+        
+        duel_data_for_opponent = {
+            "type": "pvp_start",
+            "wager": wager,
+            "party": opponent_party,
+            "enemies": [dict(p, isEnemy=True) for p in challenger_party]
+        }
+
+        await manager.send_to(challenger['id'], duel_data_for_challenger)
+        await manager.send_to(opponent['id'], duel_data_for_opponent)
+
+        return {"success": True}
+
+# ==================== ROOT & RUN ====================
+
+@api_router.get("/")
+async def root():
+    return {"message": "Game Engine API", "version": "2.0.0"}
+
+@api_router.get("/health")
+async def health():
+    return {"status": "healthy", "database": db_pool is not None}
+
+app.include_router(api_router)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

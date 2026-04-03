@@ -186,6 +186,33 @@ const AUTO_SAVE_INTERVAL = 5000;
 
 export const Overworld = () => {
   const canvasRef = useRef(null);
+  const audioRef = useRef(new Audio());
+  const [isMuted, setIsMuted] = useState(true);
+
+  // Background Music Mapping (Replace URLs with your own music files later)
+  const MAP_MUSIC = useMemo(() => ({
+    forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    village: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    cave: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    mountain: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    wasteland: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
+    tundra: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
+    sky_reach: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+    sunken_citadel: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+  }), []);
+
+  // Handle Music Switching
+  useEffect(() => {
+    const audio = audioRef.current;
+    audio.src = MAP_MUSIC[currentMap] || MAP_MUSIC.forest;
+    audio.loop = true;
+    audio.volume = 0.2; // Low background volume
+    if (!isMuted) {
+      audio.play().catch(e => console.log("Audio blocked by browser:", e));
+    }
+    return () => audio.pause();
+  }, [currentMap, isMuted, MAP_MUSIC]);
+
   const { 
     player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
     chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
@@ -747,12 +774,16 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
               </svg>
               {/* Core Node */}
               <div className="absolute top-[20%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                 <button className="w-20 h-20 bg-gradient-to-br from-amber-600 to-amber-900 border-4 border-amber-400 rounded-full text-3xl shadow-[0_0_20px_rgba(245,158,11,0.6)] hover:scale-110 transition-all">⚔️</button>
-                 <span className="text-amber-400 text-xs mt-2 font-black tracking-wider bg-black/50 px-2 py-1 rounded">+5% CRIT</span>
+                 <button 
+                   onClick={async () => { await axios.post(`${API}/player/skill-tree/spend?node_type=crit`, {}, { headers: getAuthHeader() }); fetchPlayer(); }}
+                   className="w-20 h-20 bg-gradient-to-br from-amber-600 to-amber-900 border-4 border-amber-400 rounded-full text-3xl shadow-[0_0_20px_rgba(245,158,11,0.6)] hover:scale-110 transition-all">⚔️</button>
+                 <span className="text-amber-400 text-xs mt-2 font-black tracking-wider bg-black/50 px-2 py-1 rounded">+2 STR</span>
               </div>
               {/* Branch Nodes */}
               <div className="absolute top-[50%] left-[30%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                 <button className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">❤️</button>
+                 <button 
+                   onClick={async () => { await axios.post(`${API}/player/skill-tree/spend?node_type=hp`, {}, { headers: getAuthHeader() }); fetchPlayer(); }}
+                   className="w-16 h-16 bg-slate-800 border-4 border-slate-500 rounded-full text-2xl hover:scale-110 transition-all hover:border-amber-400">❤️</button>
                  <span className="text-white text-[10px] mt-2 font-bold bg-black/50 px-2 py-1 rounded">+20 MAX HP</span>
               </div>
               <div className="absolute top-[50%] left-[70%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
@@ -912,9 +943,17 @@ const [showSkillTree, setShowSkillTree] = useState(false); // NEW
         ))}
       </div>
 
-      {/* Controls */}
-      <div className="absolute top-4 right-4 bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-1 text-slate-300 text-xs">
-        <span className="text-amber-400">WASD</span>: Move | <span className="text-amber-400">M</span>: Menu
+      {/* Controls & Sound */}
+      <div className="absolute top-4 right-4 flex gap-2">
+        <button 
+          onClick={() => setIsMuted(!isMuted)}
+          className="bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-1 text-white text-xs hover:bg-slate-800"
+        >
+          {isMuted ? '🔈 Unmute' : '🔊 Muting'}
+        </button>
+        <div className="bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-1 text-slate-300 text-xs">
+          <span className="text-amber-400">WASD</span>: Move | <span className="text-amber-400">M</span>: Menu
+        </div>
       </div>
 
       {/* Canvas */}
