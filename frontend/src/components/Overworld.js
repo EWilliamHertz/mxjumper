@@ -917,26 +917,26 @@ export const Overworld = () => {
  
       {/* Trade Modal */}
       {selectedEntity?.type === 'player' && showEntityMenu && selectedEntity.inTrade && (
-        <div className=\"absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-950 border-4 border-green-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(34,197,94,0.3)] flex flex-col\">
-           <h2 className=\"text-xl text-green-400 font-black uppercase tracking-widest text-center mb-2\">Trade with {selectedEntity.name}</h2>
-           <div className=\"grid grid-cols-2 gap-4 mb-4\">
-             <div className=\"bg-slate-900 p-4 rounded-lg border border-slate-700\">
-               <div className=\"text-green-400 text-sm font-bold mb-2\">Your Offer</div>
-               <div className=\"space-y-1 max-h-32 overflow-y-auto text-xs text-slate-300\">
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-950 border-4 border-green-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(34,197,94,0.3)] flex flex-col">
+           <h2 className="text-xl text-green-400 font-black uppercase tracking-widest text-center mb-2">Trade with {selectedEntity.name}</h2>
+           <div className="grid grid-cols-2 gap-4 mb-4">
+             <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
+               <div className="text-green-400 text-sm font-bold mb-2">Your Offer</div>
+               <div className="space-y-1 max-h-32 overflow-y-auto text-xs text-slate-300">
                  <p>Your party is ready</p>
-                 <p className=\"text-amber-400\">Gold: {player?.gold || 0}G</p>
+                 <p className="text-amber-400">Gold: {player?.gold || 0}G</p>
                </div>
              </div>
-             <div className=\"bg-slate-900 p-4 rounded-lg border border-slate-700\">
-               <div className=\"text-green-400 text-sm font-bold mb-2\">Their Offer</div>
-               <div className=\"space-y-1 max-h-32 overflow-y-auto text-xs text-slate-300\">
+             <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
+               <div className="text-green-400 text-sm font-bold mb-2">Their Offer</div>
+               <div className="space-y-1 max-h-32 overflow-y-auto text-xs text-slate-300">
                  <p>Waiting for trade details...</p>
                </div>
              </div>
            </div>
-           <div className=\"flex gap-2\">
-             <button className=\"flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest\" onClick={() => { sendMultiplayerRequest('trade_accept', selectedEntity.id); setShowEntityMenu(false); }}>Accept Trade</button>
-             <button className=\"flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded uppercase text-xs\" onClick={() => setShowEntityMenu(false)}>Decline</button>
+           <div className="flex gap-2">
+             <button className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest" onClick={() => { sendMultiplayerRequest('trade_accept', selectedEntity.id); setShowEntityMenu(false); }}>Accept Trade</button>
+             <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded uppercase text-xs" onClick={() => setShowEntityMenu(false)}>Decline</button>
            </div>
         </div>
       )}
