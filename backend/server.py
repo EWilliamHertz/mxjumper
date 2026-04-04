@@ -266,18 +266,23 @@ async def init_db():
             )
         ''')
         
-        if elder_id and slime_id:
-                quests = [
-                    ('Slime Cleanup', 'Defeat 3 slimes in the forest.', 'Excellent work cleaning up those slimes! Here is your reward.', elder_id, slime_id, 3, 100, 150),
-                    ('Wolf Hunt', 'Hunt down 2 wolves.', 'Those wolves won\'t bother us anymore. Thank you, adventurer!', elder_id, wolf_id, 2, 150, 200),
-                    ('Skeleton Purge', 'Clear 5 skeletons from the cave.', 'The cave feels much safer with those skeletons gone. Great job!', elder_id, skeleton_id, 5, 250, 350),
-                ]
-                await conn.executemany('''
-                    INSERT INTO quests (name, description, completion_dialogue, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ''', quests)
-        
-        # Player quests
+        # Quests table with sequential unlocking support
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS quests (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                completion_dialogue TEXT,
+                prerequisite_quest_id INTEGER REFERENCES quests(id),
+                npc_id INTEGER REFERENCES npcs(id),
+                required_monster_id INTEGER REFERENCES monsters(id),
+                required_count INTEGER DEFAULT 1,
+                reward_gold INTEGER DEFAULT 50,
+                reward_xp INTEGER DEFAULT 100
+            )
+        ''')
+
+        # Player quests progress table
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS player_quests (
                 id SERIAL PRIMARY KEY,
@@ -407,25 +412,66 @@ async def seed_data():
             ''', npcs)
             logger.info("Seeded 4 NPCs")
         
-        # Seed quests
-        count = await conn.fetchval('SELECT COUNT(*) FROM quests')
+        # Seed NPCs first to ensure they exist
+        count = await conn.fetchval('SELECT COUNT(*) FROM npcs')
         if count == 0:
-            elder_id = await conn.fetchval("SELECT id FROM npcs WHERE name = 'Elder Oak'")
-            slime_id = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Slime'")
-            wolf_id = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Wolf'")
-            skeleton_id = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Skeleton'")
-            
-            if elder_id and slime_id:
-                quests = [
-                    ('Slime Cleanup', 'Defeat 3 slimes in the forest.', elder_id, slime_id, 3, 100, 150),
-                    ('Wolf Hunt', 'Hunt down 2 wolves.', elder_id, wolf_id, 2, 150, 200),
-                    ('Skeleton Purge', 'Clear 5 skeletons from the cave.', elder_id, skeleton_id, 5, 250, 350),
-                ]
-                await conn.executemany('''
-                    INSERT INTO quests (name, description, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ''', quests)
-                logger.info("Seeded 3 quests")
+            npcs = [
+                ('Elder Oak', 'quest_giver', 'village', 250, 460, 'Welcome, adventurer! I have tasks for brave souls.', None),
+                ('Merchant Mari', 'shop', 'village', 550, 460, 'Looking to buy or sell? I have the finest wares!', 
+                 json.dumps([{"name": "Health Potion", "price": 50, "effect": "heal", "value": 50}, {"name": "Mana Potion", "price": 40, "effect": "mp", "value": 30}])),
+                ('Healer Luna', 'healer', 'village', 400, 460, 'Rest here and restore your strength.', None),
+            ]
+            await conn.executemany('INSERT INTO npcs (name, npc_type, zone, position_x, position_y, dialogue, shop_items) VALUES ($1, $2, $3, $4, $5, $6, $7)', npcs)
+
+        # Seed the Quest Chain
+        quest_count = await conn.fetchval('SELECT COUNT(*) FROM quests')
+        if quest_count == 0:
+            elder = await conn.fetchval("SELECT id FROM npcs WHERE name = 'Elder Oak'")
+            # Monster IDs
+            slime = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Slime'")
+            mush = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Mushroom'")
+            wolf = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Wolf'")
+            bat = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Bat'")
+            skel = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Skeleton'")
+            gobl = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Goblin'")
+
+            # Quest 1: No prereq
+            q1_id = await conn.fetchval('''
+                INSERT INTO quests (name, description, completion_dialogue, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                VALUES ('Green Menace', 'Defeat 3 Slimes in the Forest.', 'The forest paths are clear! Here is some gold.', $1, $2, 3, 100, 150) RETURNING id
+            ''', elder, slime)
+
+            # Quest 2: Needs Quest 1
+            q2_id = await conn.fetchval('''
+                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                VALUES ('Magic Spores', 'Defeat 3 Mushrooms.', 'These spores will help the healer. Good job!', $1, $2, $3, 3, 150, 200) RETURNING id
+            ''', q1_id, elder, mush)
+
+            # Quest 3: Needs Quest 2
+            q3_id = await conn.fetchval('''
+                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                VALUES ('Alpha Hunter', 'Defeat 2 Wolves.', 'Those wolves won''t bother us anymore. Thank you!', $1, $2, $3, 2, 200, 300) RETURNING id
+            ''', q2_id, elder, wolf)
+
+            # Quest 4: Needs Quest 3
+            q4_id = await conn.fetchval('''
+                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                VALUES ('Cave Shadows', 'Defeat 5 Bats in the Cave.', 'The cave is dark, but at least the bats are gone.', $1, $2, $3, 5, 250, 400) RETURNING id
+            ''', q3_id, elder, bat)
+
+            # Quest 5: Needs Quest 4
+            q5_id = await conn.fetchval('''
+                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                VALUES ('Bones to Dust', 'Defeat 5 Skeletons.', 'Rest well, undead... great work, hero.', $1, $2, $3, 5, 400, 600) RETURNING id
+            ''', q4_id, elder, skel)
+
+            # Quest 6: Needs Quest 5
+            await conn.execute('''
+                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                VALUES ('Mountain Scout', 'Defeat 3 Goblins on the Mountain.', 'Goblins are tricky. Thanks for handling them!', $1, $2, $3, 3, 500, 800)
+            ''', q5_id, elder, gobl)
+
+            logger.info("Seeded sequential RPG quest chain")
         
         # Seed admin
         admin_email = os.environ.get('ADMIN_EMAIL', 'admin@game.com')
@@ -1449,11 +1495,18 @@ async def get_quests(request: Request):
     async with db_pool.acquire() as conn:
         player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
         
+        # Quests are available if:
+        # 1. Player hasn't started them yet
+        # 2. AND (Quest has no prerequisite OR the prerequisite is already completed)
         available = await conn.fetch('''
             SELECT q.*, n.name as npc_name, m.name as monster_name FROM quests q
             JOIN npcs n ON q.npc_id = n.id
             JOIN monsters m ON q.required_monster_id = m.id
             WHERE q.id NOT IN (SELECT quest_id FROM player_quests WHERE player_id = $1)
+            AND (
+                q.prerequisite_quest_id IS NULL 
+                OR q.prerequisite_quest_id IN (SELECT quest_id FROM player_quests WHERE player_id = $1 AND completed = TRUE)
+            )
         ''', player['id'])
         
         active = await conn.fetch('''
