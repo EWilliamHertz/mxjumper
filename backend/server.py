@@ -779,7 +779,7 @@ async def get_random_encounter(zone: str = 'forest'):
     async with db_pool.acquire() as conn:
         monsters = await conn.fetch('SELECT * FROM monsters WHERE zone = $1 ORDER BY RANDOM() LIMIT $2', zone, random.randint(1, 3))
         if not monsters:
-            monsters = await conn.fetch('SELECT * FROM monsters ORDER BY RANDOM() LIMIT $1', random.randint(1, 3))
+            return []
         
         difficulty_map = {
             "forest": 0.4,
