@@ -24,6 +24,7 @@ const MAPS = {
     exits: [
       { x: 0, y: 460, width: 50, height: 60, to: 'slime_forest', label: '← Slime Forest' },
       { x: 950, y: 460, width: 50, height: 60, to: 'cave', label: 'Cave →' },
+      { x: 480, y: 100, width: 60, height: 60, to: 'village', label: 'Village ↑' },
     ],
     spawnX: 100,
     spawnY: 400,
@@ -151,6 +152,7 @@ const MAPS = {
     ],
     exits: [
       { x: 0, y: 460, width: 50, height: 60, to: 'mountain', label: '← Mountain' },
+      { x: 950, y: 460, width: 50, height: 60, to: 'forest', label: 'Forest →' },
     ],
     npcs: [
       { id: 1, x: 250, y: 460, name: 'Elder Oak', type: 'quest_giver' },
@@ -261,7 +263,7 @@ const MAPS = {
       { x: 750, y: 480, type: 'cloud' },
     ],
     exits: [
-      { x: 0, y: 460, width: 50, height: 60, to: 'village', label: '← Village' },
+      { x: 0, y: 460, width: 50, height: 60, to: 'mountain', label: '← Mountain' },
     ],
     spawnX: 100,
     spawnY: 400,
@@ -354,6 +356,11 @@ export const Overworld = () => {
   useEffect(() => { 
     playerDetailsRef.current = player; 
   }, [player]);
+  
+  // Refresh player data on mount (e.g., returning from combat)
+  useEffect(() => {
+    fetchPlayer();
+  }, [fetchPlayer]);
   // Background Music Mapping
   const MAP_MUSIC = useMemo(() => ({
     forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
