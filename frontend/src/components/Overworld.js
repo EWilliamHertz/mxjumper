@@ -400,11 +400,8 @@ export const Overworld = () => {
       if (fetchPlayer) fetchPlayer();
       
       setCurrentMap(player.current_map || 'forest');
-      setPlayerState(prev => ({
-        ...prev,
-        x: player.position_x || 100,
-        y: player.position_y || 400,
-      }));
+      playerRef.current.x = player.position_x || 100;
+      playerRef.current.y = player.position_y || 400;
     }
   }, [player, fetchPlayer]);
  
@@ -455,7 +452,7 @@ export const Overworld = () => {
         setNpcDialog(null);
       }
       if (key === 'm' && !npcDialog) {
-        updatePosition(playerState.x, playerState.y, currentMap);
+        updatePosition(playerRef.current.x, playerRef.current.y, currentMap);
         setGameState('menu');
       }
       if (key === 'h') healParty();
@@ -484,7 +481,8 @@ export const Overworld = () => {
           const newMap = MAPS[exit.to];
           updatePosition(newMap.spawnX, newMap.spawnY, exit.to);
           setCurrentMap(exit.to);
-          setPlayerState(prev => ({ ...prev, x: exit.x < 100 ? 900 : newMap.spawnX, y: newMap.spawnY }));
+          playerRef.current.x = exit.x < 100 ? 900 : newMap.spawnX;
+          playerRef.current.y = newMap.spawnY;
           return true;
         }
       }
