@@ -538,7 +538,7 @@ export const Overworld = () => {
       const keys = keysRef.current;
       frameCount++;
       
-      if (!npcDialog && !showEntityMenu && !showInventory && !showSkillTree && !showGuildMenu && !duelSetup) {
+      if (!npcDialog && !showEntityMenu && !showMap && !showTutorial && !showSkillTree && !showGuildMenu && !duelSetup) {
         let p = playerRef.current;
         p.vx = 0;
         
@@ -629,7 +629,7 @@ export const Overworld = () => {
     
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [mapData, currentMap, npcDialog, showEntityMenu, showInventory, showSkillTree, showGuildMenu, duelSetup, startEncounter, updatePosition, sendPosition]);
+  }, [mapData, currentMap, npcDialog, showEntityMenu, showMap, showTutorial, showSkillTree, showGuildMenu, duelSetup, startEncounter, updatePosition, sendPosition]);
   // Handle canvas click
   const handleCanvasClick = async (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
