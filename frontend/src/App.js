@@ -24,19 +24,19 @@ const LoadingScreen = () => (
 
 // Game content router
 const GameContent = () => {
-  const { player, playerLoading, gameState } = useGame();
+  const { player, playerLoading, isLoadingPlayer, gameState } = useGame();
 
-  // Still loading player data
-  if (playerLoading) {
+  // Block rendering until the backend confirms if the player exists or not
+  if (playerLoading || isLoadingPlayer) {
     return <LoadingScreen />;
   }
 
-  // No player created yet
+  // Backend confirmed 404 - this user has no character yet
   if (!player) {
     return <CharacterCreation />;
   }
 
-  // Route based on game state
+  // Player exists, route based on game state
   switch (gameState) {
     case 'combat':
       return <CombatScreen />;

@@ -17,6 +17,7 @@ export const useGame = () => {
 export const GameProvider = ({ children }) => {
   const { user } = useAuth();
   const [player, setPlayer] = useState(null);
+  const [isLoadingPlayer, setIsLoadingPlayer] = useState(true); // NEW: Prevents the flash
   const [playerLoading, setPlayerLoading] = useState(true);
   const [party, setParty] = useState([]);
   const [allies, setAllies] = useState([]);
@@ -41,7 +42,8 @@ export const GameProvider = ({ children }) => {
   // Fetch player data
   const fetchPlayer = useCallback(async () => {
     try {
-      setPlayerLoading(true);
+      // Only set loading true if we don't already have a player (prevents flashing on re-fetches)
+      if (!player) setPlayerLoading(true); 
       const { data } = await axios.get(`${API}/player`, { headers: getAuthHeader() });
       setPlayer(data);
       return data;
@@ -50,8 +52,9 @@ export const GameProvider = ({ children }) => {
       return null;
     } finally {
       setPlayerLoading(false);
+      setIsLoadingPlayer(false); // Make sure to flip your new state too, just in case
     }
-  }, [getAuthHeader]);
+  }, [getAuthHeader, player]);
 
   // Create player
   const createPlayer = useCallback(async (name) => {
@@ -448,15 +451,30 @@ export const GameProvider = ({ children }) => {
 
   // Initial fetch
   useEffect(() => {
-    if (user) {
-      fetchPlayer();
-      fetchAllies();
-      fetchAbilities();
-      fetchFriends();
-      fetchQuests();
-      fetchChatMessages();
-    }
-  }, [user, fetchPlayer, fetchAllies, fetchAbilities, fetchFriends, fetchQuests, fetchChatMessages]);
+    let mounted = true;
+
+    const loadGameData = async () => {
+      if (user) {
+        setPlayerLoading(true);
+        // Await the player fetch first so we don't flash screens
+        await fetchPlayer(); 
+        
+        if (!mounted) return;
+        
+        // Fetch the rest in the background
+        fetchAllies();
+        fetchAbilities();
+        fetchFriends();
+        fetchQuests();
+        fetchChatMessages();
+      }
+    };
+
+    loadGameData();
+    return () => { mounted = false; };
+  // Only trigger on user login/change, drop the other dependencies to stop loops
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   return (
     <GameContext.Provider value={{
