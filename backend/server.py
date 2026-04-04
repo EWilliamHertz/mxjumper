@@ -266,19 +266,16 @@ async def init_db():
             )
         ''')
         
-        # Quests table
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS quests (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                description TEXT,
-                npc_id INTEGER REFERENCES npcs(id),
-                required_monster_id INTEGER REFERENCES monsters(id),
-                required_count INTEGER DEFAULT 1,
-                reward_gold INTEGER DEFAULT 50,
-                reward_xp INTEGER DEFAULT 100
-            )
-        ''')
+        if elder_id and slime_id:
+                quests = [
+                    ('Slime Cleanup', 'Defeat 3 slimes in the forest.', 'Excellent work cleaning up those slimes! Here is your reward.', elder_id, slime_id, 3, 100, 150),
+                    ('Wolf Hunt', 'Hunt down 2 wolves.', 'Those wolves won\'t bother us anymore. Thank you, adventurer!', elder_id, wolf_id, 2, 150, 200),
+                    ('Skeleton Purge', 'Clear 5 skeletons from the cave.', 'The cave feels much safer with those skeletons gone. Great job!', elder_id, skeleton_id, 5, 250, 350),
+                ]
+                await conn.executemany('''
+                    INSERT INTO quests (name, description, completion_dialogue, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ''', quests)
         
         # Player quests
         await conn.execute('''
@@ -1158,7 +1155,9 @@ async def combat_victory(request: Request):
         
 # Save Inventory using Manager
         for item in items_dropped:
-            await InventoryManager.add_item(conn, player['id'], item)        updated_player = await conn.fetchrow('SELECT * FROM players WHERE id = $1', player['id'])
+            await InventoryManager.add_item(conn, player['id'], item)
+            
+        updated_player = await conn.fetchrow('SELECT * FROM players WHERE id = $1', player['id'])
         return {
             "xp_gained": xp_gained,
             "gold_earned": gold_earned,
@@ -1370,8 +1369,9 @@ async def interact_npc(npc_id: int, request: Request):
             npc_dict['shop_items'] = json.loads(npc_dict['shop_items'])
         
         # Check for completed quests first
+       # Check for completed quests first
         ready_quests = await conn.fetch('''
-            SELECT pq.id, q.name, q.reward_gold, q.reward_xp 
+            SELECT pq.id, q.name, q.reward_gold, q.reward_xp, q.completion_dialogue
             FROM player_quests pq
             JOIN quests q ON pq.quest_id = q.id
             WHERE pq.player_id = $1 AND q.npc_id = $2 
@@ -1379,10 +1379,16 @@ async def interact_npc(npc_id: int, request: Request):
         ''', player['id'], npc_id)
         
         if ready_quests:
+            # Use the dialogue from the first completed quest
+            comp_dialogue = ready_quests[0]['completion_dialogue'] or "Thank you for completing the task!"
+            
             for rq in ready_quests:
                 await conn.execute('UPDATE player_quests SET completed = TRUE WHERE id = $1', rq['id'])
                 await conn.execute('UPDATE players SET gold = gold + $1, xp = xp + $2 WHERE id = $3', 
                                    rq['reward_gold'], rq['reward_xp'], player['id'])
+            
+            # Overwrite the standard NPC dialogue with the quest completion message
+            npc_dict['dialogue'] = comp_dialogue
             
             return {
                 "success": True, 
@@ -1390,7 +1396,6 @@ async def interact_npc(npc_id: int, request: Request):
                 "message": f"Quest Complete! You earned gold and XP from {npc['name']}.",
                 "npc": npc_dict
             }
-
         if npc['npc_type'] == 'healer':
             await conn.execute('UPDATE players SET hp = max_hp, mp = max_mp WHERE id = $1', player['id'])
             await conn.execute('UPDATE captured_allies SET hp = max_hp, mp = max_mp WHERE player_id = $1', player['id'])
