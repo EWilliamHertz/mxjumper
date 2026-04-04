@@ -405,18 +405,19 @@ export const Overworld = () => {
  
   const mapData = MAPS[currentMap];
  
+  const isInitializedRef = useRef(false);
+
   // Load saved position (re-fetch when returning from combat)
   useEffect(() => {
-    if (player) {
-      // Ensure we have fresh position data when entering the overworld
-      if (fetchPlayer) fetchPlayer();
-      
+    if (player && !isInitializedRef.current) {
       setCurrentMap(player.current_map || 'forest');
       playerRef.current.x = player.position_x || 100;
       playerRef.current.y = player.position_y || 400;
+      
+      // Lock it so background saves don't rubber-band the player back
+      isInitializedRef.current = true; 
     }
-  }, [player, fetchPlayer]);
- 
+  }, [player]);
   // Auto-save position and map
   useEffect(() => {
     const saveInterval = setInterval(() => {
