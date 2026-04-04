@@ -461,6 +461,8 @@ app.add_middleware(
         FRONTEND_URL,
         "https://frontend-production-86c4.up.railway.app",
         "https://mxjumper.up.railway.app",
+        "https://mxjumper-production.up.railway.app/",
+        "https://frontend-production-86c4.up.railway.app/",
         "http://localhost:3000"
     ],
     allow_origin_regex=r"https://.*\.railway\.app|https://.*\.up\.railway\.app",
