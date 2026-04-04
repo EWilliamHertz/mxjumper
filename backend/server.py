@@ -1681,13 +1681,46 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
                 await manager.broadcast({"type": "positions", "players": manager.player_data})
             
             elif msg.get('type') == 'chat':
-                await manager.broadcast({
-                    "type": "chat",
-                    "sender_id": player_id,
-                    "sender_name": msg.get('name', 'Unknown'),
-                    "message": msg.get('message', ''),
-                    "channel": msg.get('channel', 'global')
-                })
+                message_text = msg.get('message', '')
+                
+                # Check for /duel command
+                if message_text.lower().startswith('/duel '):
+                    target_name = message_text[6:].strip()
+                    async with db_pool.acquire() as conn:
+                        # Find the player ID by the name (case insensitive)
+                        target = await conn.fetchrow('SELECT id FROM players WHERE name ILIKE $1', target_name)
+                        
+                        if target:
+                            # Send the request through the socket
+                            await manager.send_to(target['id'], {
+                                "type": "duel_request",
+                                "from_id": player_id,
+                                "from_name": msg.get('name', 'Unknown'),
+                                "wager": 100
+                            })
+                            # Confirm to the sender
+                            await manager.send_to(player_id, {
+                                "type": "chat",
+                                "sender_name": "System",
+                                "message": f"Duel request sent to {target_name}!",
+                                "channel": "global"
+                            })
+                        else:
+                            await manager.send_to(player_id, {
+                                "type": "chat",
+                                "sender_name": "System",
+                                "message": f"Player '{target_name}' not found.",
+                                "channel": "global"
+                            })
+                else:
+                    # Regular chat broadcast
+                    await manager.broadcast({
+                        "type": "chat",
+                        "sender_id": player_id,
+                        "sender_name": msg.get('name', 'Unknown'),
+                        "message": message_text,
+                        "channel": msg.get('channel', 'global')
+                    })
             
             elif msg.get('type') == 'friend_request':
                 target_id = msg.get('target_id')
