@@ -15,6 +15,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 import asyncpg
+from game_logic import InventoryManager, AbilityManager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -160,18 +161,24 @@ async def init_db():
         except:
             pass
         
-        # Entity abilities
+        # Entity abilities with levels (Diablo style)
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS entity_abilities (
                 id SERIAL PRIMARY KEY,
                 player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
                 ally_id INTEGER REFERENCES captured_allies(id) ON DELETE CASCADE,
                 ability_id INTEGER REFERENCES abilities(id),
+                level INTEGER DEFAULT 1,
                 unlocked_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(player_id, ability_id),
                 UNIQUE(ally_id, ability_id)
             )
         ''')
+        try:
+            await conn.execute('ALTER TABLE entity_abilities ADD COLUMN IF NOT EXISTS level INTEGER DEFAULT 1')
+            await conn.execute('ALTER TABLE abilities ADD COLUMN IF NOT EXISTS prerequisite_id INTEGER REFERENCES abilities(id)')
+        except:
+            pass
         
         # Friends table
         await conn.execute('''
@@ -756,23 +763,20 @@ async def heal_player(request: Request):
             await conn.execute('UPDATE captured_allies SET hp = max_hp, mp = max_mp WHERE player_id = $1', player['id'])
         return {"success": True}
 
-@api_router.post("/player/skill-tree/spend")
-async def spend_skill_point(node_type: str, request: Request):
+@api_router.post("/player/abilities/upgrade")
+async def upgrade_ability(ability_id: int, request: Request):
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
-        player = await conn.fetchrow('SELECT id, skill_points, max_hp, strength FROM players WHERE user_id = $1', user['id'])
+        player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+            
+        result = await AbilityManager.upgrade_ability(conn, player['id'], ability_id)
         
-        if player['skill_points'] <= 0:
-            raise HTTPException(status_code=400, detail="No skill points available")
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["error"])
             
-        if node_type == 'hp':
-            await conn.execute('UPDATE players SET max_hp = max_hp + 20, hp = hp + 20, skill_points = skill_points - 1 WHERE id = $1', player['id'])
-        elif node_type == 'crit':
-            await conn.execute('UPDATE players SET strength = strength + 2, skill_points = skill_points - 1 WHERE id = $1', player['id'])
-        elif node_type == 'cleave':
-            await conn.execute('UPDATE players SET skill_points = skill_points - 1 WHERE id = $1', player['id'])
-            
-        return {"success": True, "message": f"Upgraded {node_type}!"}
+        return result
 
 # ==================== MONSTER ENDPOINTS ====================
 
@@ -1426,18 +1430,22 @@ async def buy_from_npc(npc_id: int, request: Request):
         if player['gold'] < item['price']:
             raise HTTPException(status_code=400, detail="Not enough gold")
         
-        await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', item['price'], player['id'])
+        # Deduct gold and add to inventory in one go
+        async with conn.transaction():
+            await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', item['price'], player['id'])
+            
+            # If it's gear/item, add to inventory. If it's a direct consumable, apply effect.
+            if item.get('effect') in ['strength', 'vitality']:
+                # Adding gear to inventory so it doesn't disappear!
+                await InventoryManager.add_item(conn, player['id'], item)
+            else:
+                # Instant consumables (Potions)
+                if item['effect'] == 'heal':
+                    await conn.execute('UPDATE players SET hp = LEAST(hp + $1, max_hp) WHERE id = $2', item['value'], player['id'])
+                elif item['effect'] == 'mp':
+                    await conn.execute('UPDATE players SET mp = LEAST(mp + $1, max_mp) WHERE id = $2', item['value'], player['id'])
         
-        if item['effect'] == 'heal':
-            await conn.execute('UPDATE players SET hp = LEAST(hp + $1, max_hp) WHERE id = $2', item['value'], player['id'])
-        elif item['effect'] == 'mp':
-            await conn.execute('UPDATE players SET mp = LEAST(mp + $1, max_mp) WHERE id = $2', item['value'], player['id'])
-        elif item['effect'] == 'strength':
-            await conn.execute('UPDATE players SET strength = strength + $1 WHERE id = $2', item['value'], player['id'])
-        elif item['effect'] == 'vitality':
-            await conn.execute('UPDATE players SET vitality = vitality + $1, max_hp = max_hp + $2 WHERE id = $3', item['value'], item['value'] * 10, player['id'])
-        
-        return {"success": True, "message": f"Purchased {item['name']}!"}
+        return {"success": True, "message": f"Purchased {item['name']}!", "gold_remaining": player['gold'] - item['price']}
 
 # ==================== QUEST ENDPOINTS ====================
 
