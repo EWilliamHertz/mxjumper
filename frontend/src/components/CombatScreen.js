@@ -300,11 +300,12 @@ export const CombatScreen = () => {
       : `Encountered ${e.map(x => x.name).join(', ')}!`;
     setLog([encounterMsg]);
     const tl = buildTimeline(p, e);
-    setTimeline(tl);
-    const first = tl[0];
-    setPhase(first?.isEnemy ? 'enemy' : 'player');
-    if (first && !first.isEnemy) { setMenu('main'); setQueued(null); }
-  }, [combatData, fetchAbilities]);
+        setTimeline(tl);
+        const first = tl[0];
+        setPhase(first?.isEnemy ? 'enemy' : 'player');
+        if (first && !first.isEnemy) { setMenu('main'); setQueued(null); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combatData]);
  
   // ── victory fire ──
   useEffect(() => {
