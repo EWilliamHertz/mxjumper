@@ -688,24 +688,23 @@ async def create_player(data: PlayerCreate, request: Request):
 
 @api_router.get("/player")
 async def get_player(request: Request):
-user = await get_current_user(request)
- async with db_pool.acquire() as conn:
-    player = await conn.fetchrow('''
-      SELECT id, user_id, name, level, xp, xp_to_next, hp, max_hp, mp, max_mp,
-         strength, agility, intelligence, vitality, stat_points, position_x, position_y,
-         COALESCE(current_map, 'forest') as current_map, COALESCE(gold, 100) as gold,
-         COALESCE(inventory, '[]'::jsonb) as inventory, sprite
-      FROM players WHERE user_id = $1
-    ''', user['id'])
-    if not player:
-      raise HTTPException(status_code=404, detail="Player not found")
-   
-    p_dict = dict(player)
-    if isinstance(p_dict.get('inventory'), str):
-      import json
-      p_dict['inventory'] = json.loads(p_dict['inventory'])
-    return p_dict
+    user = await get_current_user(request)
+    async with db_pool.acquire() as conn:
+        player = await conn.fetchrow('''
+            SELECT id, user_id, name, level, xp, xp_to_next, hp, max_hp, mp, max_mp,
+                   strength, agility, intelligence, vitality, stat_points, position_x, position_y,
+                   COALESCE(current_map, 'forest') as current_map, COALESCE(gold, 100) as gold,
+                   COALESCE(inventory, '[]'::jsonb) as inventory, sprite
+            FROM players WHERE user_id = $1
+        ''', user['id'])
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
 
+        p_dict = dict(player)
+        if isinstance(p_dict.get('inventory'), str):
+            import json
+            p_dict['inventory'] = json.loads(p_dict['inventory'])
+        return p_dict
 @api_router.put("/player/position")
 async def update_position(data: PositionUpdate, request: Request):
     user = await get_current_user(request)
@@ -1178,7 +1177,9 @@ async def combat_victory(request: Request):
                 "gold": updated_player['gold'],
                 "stat_points": updated_player['stat_points'],
             }
-        }        @api_router.post("/combat/save-state")
+        }    
+
+        @api_router.post("/combat/save-state")
 async def save_combat_state(request: Request):
     body = await request.json()
     party_state = body.get('party', [])
