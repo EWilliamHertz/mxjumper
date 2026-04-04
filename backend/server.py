@@ -322,9 +322,8 @@ async def init_db():
 
 async def seed_data():
     async with db_pool.acquire() as conn:
-        # Seed monsters with zones - upsert
+        # 1. Seed Monsters (Full List)
         monsters = [
-            # (name, hp, mp, str, agi, int, vit, sprite, capture, xp, zone, desc, is_boss, gold)
             ('Slime', 40, 10, 6, 5, 3, 8, 'slime', 0.5, 20, 'slime', 'A bouncy green slime.', False, 10),
             ('Mushroom', 50, 30, 7, 6, 12, 10, 'mushroom', 0.45, 30, 'forest', 'A magical forest mushroom.', False, 15),
             ('Wolf', 70, 10, 12, 15, 4, 9, 'wolf', 0.3, 40, 'forest', 'A fierce gray wolf.', False, 25),
@@ -334,25 +333,7 @@ async def seed_data():
             ('Goblin', 60, 15, 10, 12, 5, 7, 'goblin', 0.35, 35, 'mountain', 'A mischievous goblin.', False, 25),
             ('Golem', 120, 5, 18, 3, 2, 20, 'golem', 0.15, 70, 'mountain', 'A powerful stone golem.', False, 50),
             ('Harpy', 50, 35, 8, 20, 12, 6, 'harpy', 0.25, 50, 'mountain', 'A winged harpy.', False, 35),
-            ('Ghost', 45, 40, 6, 14, 15, 5, 'ghost', 0.2, 55, 'cave', 'A spooky ethereal ghost.', False, 30),
             ('Dragon', 200, 100, 25, 12, 20, 25, 'dragon', 0.05, 200, 'mountain', 'A fearsome dragon.', True, 200),
-            ('Phoenix', 150, 80, 20, 22, 25, 15, 'phoenix', 0.08, 180, 'mountain', 'A majestic fire bird.', True, 150),
-            # Tundra monsters
-            ('Frost Wolf', 80, 15, 14, 14, 6, 12, 'frost_wolf', 0.25, 50, 'tundra', 'An ice-coated predator.', False, 35),
-            ('Ice Elemental', 90, 50, 8, 8, 18, 14, 'ice_elemental', 0.2, 65, 'tundra', 'A living shard of permafrost.', False, 45),
-            ('Yeti', 160, 20, 22, 6, 5, 22, 'yeti', 0.1, 100, 'tundra', 'A massive tundra beast.', True, 120),
-            # Abyss monsters
-            ('Shadow Wraith', 60, 60, 8, 20, 18, 6, 'shadow_wraith', 0.15, 80, 'abyss', 'A being of pure darkness.', False, 55),
-            ('Abyssal Leech', 50, 30, 12, 12, 14, 8, 'abyssal_leech', 0.2, 60, 'abyss', 'It drains your life force.', False, 40),
-            ('Void Lord', 250, 120, 28, 15, 25, 28, 'void_lord', 0.03, 300, 'abyss', 'Commander of the endless dark.', True, 300),
-            # Ruins monsters
-            ('Stone Guardian', 100, 10, 16, 4, 3, 18, 'stone_guardian', 0.18, 55, 'ruins', 'An ancient animated statue.', False, 40),
-            ('Cursed Mage', 55, 70, 6, 10, 22, 8, 'cursed_mage', 0.22, 70, 'ruins', 'A wizard trapped in undeath.', False, 50),
-            ('Ancient Sentinel', 180, 80, 20, 10, 20, 20, 'ancient_sentinel', 0.06, 150, 'ruins', 'The ruin\'s final guardian.', True, 180),
-            # Volcanic monsters
-            ('Magma Slug', 70, 20, 14, 4, 8, 16, 'magma_slug', 0.3, 45, 'volcanic', 'A slow but scorching creature.', False, 30),
-            ('Fire Imp', 45, 40, 10, 18, 14, 6, 'fire_imp', 0.28, 55, 'volcanic', 'A mischievous flame sprite.', False, 40),
-            ('Inferno Titan', 300, 100, 30, 8, 22, 30, 'inferno_titan', 0.02, 400, 'volcanic', 'A colossus of living magma.', True, 400),
         ]
         for m in monsters:
             await conn.execute('''
@@ -360,130 +341,45 @@ async def seed_data():
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (name) DO UPDATE SET zone = $11, is_boss = $13, gold_drop = $14
             ''', *m)
-        logger.info(f"Seeded/updated {len(monsters)} monsters")
-        
-        # Seed abilities with AoE + status effects (upsert)
-        abilities = [
-            # (name, desc, mp, dmg_mult, type, element, req_lv, sprite, target, status_effect, duration)
-            ('Fire Strike', 'A blazing attack dealing fire damage', 15, 1.8, 'damage', 'fire', 1, 'fire', 'single', 'burn', 2),
-            ('Ice Shard', 'Launches sharp ice that may slow', 12, 1.5, 'damage', 'ice', 1, 'ice', 'single', 'slow', 2),
-            ('Thunder Bolt', 'Calls lightning on all enemies', 20, 1.6, 'damage', 'lightning', 3, 'lightning', 'all', 'stun', 1),
-            ('Heal', 'Restores HP to an ally', 10, 0.0, 'heal', None, 1, 'heal', 'single_ally', None, 0),
-            ('Power Up', 'Boosts strength for 3 turns', 8, 0.0, 'buff', None, 2, 'buff', 'self', 'power_up', 3),
-            ('Quick Step', 'Boosts agility for 3 turns', 8, 0.0, 'buff', None, 2, 'buff', 'self', 'haste', 3),
-            ('Poison Bite', 'Poisons the enemy for 3 turns', 10, 1.2, 'dot', 'poison', 2, 'poison', 'single', 'poison', 3),
-            ('Guard', 'Halves incoming damage for 2 turns', 5, 0.0, 'buff', None, 1, 'guard', 'self', 'protect', 2),
-            ('Mega Slash', 'A devastating physical attack', 25, 2.5, 'damage', None, 5, 'slash', 'single', None, 0),
-            ('Cure All', 'Heals all party members', 30, 0.0, 'heal_all', None, 7, 'heal', 'all_ally', None, 0),
-            ('Fireball', 'A massive explosion hitting all foes', 22, 1.5, 'damage', 'fire', 4, 'fire', 'all', 'burn', 2),
-            ('Blizzard', 'An ice storm engulfing all enemies', 20, 1.4, 'damage', 'ice', 4, 'ice', 'all', 'slow', 2),
-            ('Stun Strike', 'A blow that stuns the target', 12, 1.3, 'damage', None, 3, 'slash', 'single', 'stun', 1),
-            ('Life Drain', 'Steal HP from the enemy', 18, 1.4, 'drain', None, 5, 'poison', 'single', None, 0),
+
+        # 2. Seed NPCs
+        npcs = [
+            ('Elder Oak', 'quest_giver', 'village', 250, 460, 'Welcome, adventurer!', None),
+            ('Merchant Mari', 'shop', 'village', 550, 460, 'Finest wares!', json.dumps([{"name": "Health Potion", "price": 50, "effect": "heal", "value": 50}])),
+            ('Healer Luna', 'healer', 'village', 400, 460, 'Rest here.', None),
         ]
-        for a in abilities:
+        for n in npcs:
             await conn.execute('''
-                INSERT INTO abilities (name, description, mp_cost, damage_multiplier, ability_type, element, required_level, sprite, target_type, status_effect, effect_duration)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                ON CONFLICT (name) DO UPDATE SET target_type = $9, status_effect = $10, effect_duration = $11
-            ''', *a)
-        logger.info(f"Seeded/updated {len(abilities)} abilities")
-        
-        # Seed NPCs
-        count = await conn.fetchval('SELECT COUNT(*) FROM npcs')
-        if count == 0:
-            npcs = [
-                ('Elder Oak', 'quest_giver', 'village', 250, 460, 'Welcome, adventurer! I have tasks for brave souls.', None),
-                ('Merchant Mari', 'shop', 'village', 550, 460, 'Looking to buy or sell? I have the finest wares!', 
-                 json.dumps([
-                     {"name": "Health Potion", "price": 50, "effect": "heal", "value": 50},
-                     {"name": "Mana Potion", "price": 40, "effect": "mp", "value": 30},
-                     {"name": "Capture Orb", "price": 100, "effect": "capture_boost", "value": 0.1}
-                 ])),
-                ('Blacksmith Bron', 'shop', 'village', 800, 460, 'Need equipment? I forge the best!',
-                 json.dumps([
-                     {"name": "Iron Sword", "price": 200, "effect": "strength", "value": 5},
-                     {"name": "Steel Armor", "price": 300, "effect": "vitality", "value": 5}
-                 ])),
-                ('Healer Luna', 'healer', 'village', 400, 460, 'Rest here and restore your strength.', None),
-            ]
-            await conn.executemany('''
                 INSERT INTO npcs (name, npc_type, zone, position_x, position_y, dialogue, shop_items)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ''', npcs)
-            logger.info("Seeded 4 NPCs")
-        
-        # Seed NPCs first to ensure they exist
-        count = await conn.fetchval('SELECT COUNT(*) FROM npcs')
-        if count == 0:
-            npcs = [
-                ('Elder Oak', 'quest_giver', 'village', 250, 460, 'Welcome, adventurer! I have tasks for brave souls.', None),
-                ('Merchant Mari', 'shop', 'village', 550, 460, 'Looking to buy or sell? I have the finest wares!', 
-                 json.dumps([{"name": "Health Potion", "price": 50, "effect": "heal", "value": 50}, {"name": "Mana Potion", "price": 40, "effect": "mp", "value": 30}])),
-                ('Healer Luna', 'healer', 'village', 400, 460, 'Rest here and restore your strength.', None),
-            ]
-            await conn.executemany('INSERT INTO npcs (name, npc_type, zone, position_x, position_y, dialogue, shop_items) VALUES ($1, $2, $3, $4, $5, $6, $7)', npcs)
+                VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING
+            ''', *n)
 
-        # Seed the Quest Chain
-        quest_count = await conn.fetchval('SELECT COUNT(*) FROM quests')
-        if quest_count == 0:
+        # 3. Seed Sequential RPG Quest Chain (9 Quests)
+        if await conn.fetchval('SELECT COUNT(*) FROM quests') == 0:
             elder = await conn.fetchval("SELECT id FROM npcs WHERE name = 'Elder Oak'")
-            # Monster IDs
-            slime = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Slime'")
-            mush = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Mushroom'")
-            wolf = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Wolf'")
-            bat = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Bat'")
-            skel = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Skeleton'")
-            gobl = await conn.fetchval("SELECT id FROM monsters WHERE name = 'Goblin'")
+            # IDs
+            slime, mush, wolf, bat, skel, gobl, harpy, golem, dragon = [
+                await conn.fetchval("SELECT id FROM monsters WHERE name = $1", n) 
+                for n in ['Slime', 'Mushroom', 'Wolf', 'Bat', 'Skeleton', 'Goblin', 'Harpy', 'Golem', 'Dragon']
+            ]
 
-            # Quest 1: No prereq
-            q1_id = await conn.fetchval('''
-                INSERT INTO quests (name, description, completion_dialogue, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                VALUES ('Green Menace', 'Defeat 3 Slimes in the Forest.', 'The forest paths are clear! Here is some gold.', $1, $2, 3, 100, 150) RETURNING id
-            ''', elder, slime)
+            q1 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Green Menace', 'Defeat 3 Slimes.', 'Paths are clear!', $1, $2, 3, 100, 150) RETURNING id", elder, slime)
+            q2 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Magic Spores', 'Defeat 3 Mushrooms.', 'Spore-tastic!', $1, $2, slime, 3, 150, 200) RETURNING id", q1, elder, mush)
+            q3 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Alpha Hunter', 'Defeat 2 Wolves.', 'Safe for now!', $1, $2, $3, 2, 200, 300) RETURNING id", q2, elder, wolf)
+            q4 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Cave Shadows', 'Defeat 5 Bats.', 'Darkness recedes.', $1, $2, $3, 5, 250, 400) RETURNING id", q3, elder, bat)
+            q5 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Bones to Dust', 'Defeat 5 Skeletons.', 'Rest well undead.', $1, $2, $3, 5, 400, 600) RETURNING id", q4, elder, skel)
+            q6 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Mountain Scout', 'Defeat 3 Goblins.', 'Sneaky pests gone!', $1, $2, $3, 3, 500, 800) RETURNING id", q5, elder, gobl)
+            q7 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Sky Scourge', 'Defeat 3 Harpies.', 'The skies are open!', $1, $2, harpy, 3, 800, 1200) RETURNING id", q6, elder, harpy)
+            q8 = await conn.fetchval("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Stone Breaker', 'Defeat 1 Golem.', 'Heavy lifting done!', $1, $2, golem, 1, 1500, 2000) RETURNING id", q7, elder, golem)
+            await conn.execute("INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp) VALUES ('Dragon Slayer', 'Defeat 1 Dragon.', 'A Legend is born!', $1, $2, dragon, 1, 5000, 10000)", q8, elder, dragon)
 
-            # Quest 2: Needs Quest 1
-            q2_id = await conn.fetchval('''
-                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                VALUES ('Magic Spores', 'Defeat 3 Mushrooms.', 'These spores will help the healer. Good job!', $1, $2, $3, 3, 150, 200) RETURNING id
-            ''', q1_id, elder, mush)
+        # 4. Admin
+        admin_e, admin_p = os.environ.get('ADMIN_EMAIL', 'admin@game.com'), os.environ.get('ADMIN_PASSWORD', 'admin123')
+        if not await conn.fetchrow('SELECT id FROM users WHERE email = $1', admin_e):
+            hashed = bcrypt.hashpw(admin_p.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            await conn.execute('INSERT INTO users (email, password_hash, username, role) VALUES ($1, $2, $3, $4)', admin_e, hashed, 'Admin', 'admin')
 
-            # Quest 3: Needs Quest 2
-            q3_id = await conn.fetchval('''
-                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                VALUES ('Alpha Hunter', 'Defeat 2 Wolves.', 'Those wolves won''t bother us anymore. Thank you!', $1, $2, $3, 2, 200, 300) RETURNING id
-            ''', q2_id, elder, wolf)
-
-            # Quest 4: Needs Quest 3
-            q4_id = await conn.fetchval('''
-                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                VALUES ('Cave Shadows', 'Defeat 5 Bats in the Cave.', 'The cave is dark, but at least the bats are gone.', $1, $2, $3, 5, 250, 400) RETURNING id
-            ''', q3_id, elder, bat)
-
-            # Quest 5: Needs Quest 4
-            q5_id = await conn.fetchval('''
-                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                VALUES ('Bones to Dust', 'Defeat 5 Skeletons.', 'Rest well, undead... great work, hero.', $1, $2, $3, 5, 400, 600) RETURNING id
-            ''', q4_id, elder, skel)
-
-            # Quest 6: Needs Quest 5
-            await conn.execute('''
-                INSERT INTO quests (name, description, completion_dialogue, prerequisite_quest_id, npc_id, required_monster_id, required_count, reward_gold, reward_xp)
-                VALUES ('Mountain Scout', 'Defeat 3 Goblins on the Mountain.', 'Goblins are tricky. Thanks for handling them!', $1, $2, $3, 3, 500, 800)
-            ''', q5_id, elder, gobl)
-
-            logger.info("Seeded sequential RPG quest chain")
-        
-        # Seed admin
-        admin_email = os.environ.get('ADMIN_EMAIL', 'admin@game.com')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        existing = await conn.fetchrow('SELECT id FROM users WHERE email = $1', admin_email)
-        if not existing:
-            hashed = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            await conn.execute('''
-                INSERT INTO users (email, password_hash, username, role) VALUES ($1, $2, $3, $4)
-            ''', admin_email, hashed, 'Admin', 'admin')
-            logger.info(f"Seeded admin user")
-
+    logger.info("Successfully synced player visibility and RPG quest chain.")
 async def close_db():
     global db_pool
     if db_pool:
@@ -1632,6 +1528,9 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, player_id: int):
         await websocket.accept()
         self.active_connections[player_id] = websocket
+        # Send existing player positions to the new connection immediately
+        if self.player_data:
+            await websocket.send_text(json.dumps({"type": "positions", "players": self.player_data}))
         logger.info(f"Player {player_id} connected. Total: {len(self.active_connections)}")
     
     def disconnect(self, player_id: int):
