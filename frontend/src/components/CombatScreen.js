@@ -1,41 +1,40 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useGame } from '../contexts/GameContext';
-
-// Calculate turn order - regenerates when needed
-const calculateTurnOrder = (party, enemies, startFrom = 0, turns = 15) => {
+ 
+// Calculate turn order from LIVE state
+const calculateTurnOrder = (party, enemies, turns = 15) => {
   const allCombatants = [
     ...party.map(p => ({ ...p, isEnemy: false })),
     ...enemies.map(e => ({ ...e, isEnemy: true }))
-  ].filter(c => c.current_hp > 0);
-
+  ].filter(c => (c.isEnemy ? c.current_hp : c.current_hp) > 0);
+ 
   if (allCombatants.length === 0) return [];
-
+ 
   const timeline = [];
   const turnCounters = {};
-  
+ 
   allCombatants.forEach(c => {
     const id = c.isEnemy ? c.encounter_id : (c.type === 'player' ? 'player' : `ally_${c.id}`);
-    turnCounters[id] = startFrom;
+    turnCounters[id] = 0;
   });
-
+ 
   while (timeline.length < turns) {
     let fastest = null;
     let fastestId = null;
     let lowestWait = Infinity;
-
+ 
     allCombatants.forEach(c => {
-      if (c.current_hp <= 0) return;
       const id = c.isEnemy ? c.encounter_id : (c.type === 'player' ? 'player' : `ally_${c.id}`);
-      const agility = c.isEnemy ? c.base_agility : c.agility;
+      const agility = c.isEnemy ? (c.base_agility || 8) : (c.agility || 10);
       const waitTime = turnCounters[id] + (100 / Math.max(1, agility));
-      
+ 
       if (waitTime < lowestWait) {
         lowestWait = waitTime;
         fastest = c;
         fastestId = id;
       }
     });
-
+ 
     if (fastest) {
       timeline.push({ ...fastest, turnId: fastestId });
       turnCounters[fastestId] = lowestWait;
@@ -43,10 +42,10 @@ const calculateTurnOrder = (party, enemies, startFrom = 0, turns = 15) => {
       break;
     }
   }
-
+ 
   return timeline;
 };
-
+ 
 // Monster SVG sprites
 const MonsterSprite = ({ type, size = 64 }) => {
   const sprites = {
@@ -178,12 +177,11 @@ const MonsterSprite = ({ type, size = 64 }) => {
       </svg>
     )
   };
-
-  // Normalize the type to lowercase to match the keys in the 'sprites' object
+ 
   const normalizedType = (type || 'slime').toLowerCase();
   return sprites[normalizedType] || sprites.slime;
 };
-
+ 
 const PlayerSprite = ({ size = 64 }) => (
   <svg viewBox="0 0 64 64" width={size} height={size}>
     <rect x="24" y="36" width="16" height="20" fill="#4a90d9"/>
@@ -197,15 +195,14 @@ const PlayerSprite = ({ size = 64 }) => (
     <circle cx="36" cy="24" r="2" fill="#000"/>
   </svg>
 );
-
+ 
 export const CombatScreen = () => {
   const { combatData, setCombatData, processVictory, captureMonster, setGameState, abilities } = useGame();
-  
+ 
   const [partyState, setPartyState] = useState([]);
   const [enemyState, setEnemyState] = useState([]);
-  const [turnIndex, setTurnIndex] = useState(0);
   const [turnTimeline, setTurnTimeline] = useState([]);
-  const [timelineOffset, setTimelineOffset] = useState(0);
+  const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
   const [selectedMenu, setSelectedMenu] = useState('main');
   const [selectedAction, setSelectedAction] = useState(null);
   const [combatLog, setCombatLog] = useState([]);
@@ -218,319 +215,320 @@ export const CombatScreen = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [battleStarted, setBattleStarted] = useState(false);
   const [defeatedMonsters, setDefeatedMonsters] = useState([]);
-  const [isShaking, setIsShaking] = useState(false);
-  
-  const processedTurnsRef = useRef(new Set());
-  const turnIndexRef = useRef(0);
-  const processingRef = useRef(false); // NEW: Prevents spam-click "Waiting..." hang
-
-  // Keep ref in sync with state
-  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
-
-  // --- 1. LOGIC DEFINITIONS (Must be defined before Effects) ---
-
+ 
+  const processingRef = useRef(false);
+  const enemyActingRef = useRef(false);
+  const victoryCalledRef = useRef(false);
+ 
+  // --- Derived: rebuild timeline whenever live state changes ---
+  // We keep a "timeline queue" and regenerate from live state each time we advance
+  const rebuildTimeline = useCallback((liveParty, liveEnemies) => {
+    const aliveParty = liveParty.filter(p => p.current_hp > 0);
+    const aliveEnemies = liveEnemies.filter(e => e.current_hp > 0);
+    return calculateTurnOrder(aliveParty, aliveEnemies, 20);
+  }, []);
+ 
+  // Current actor derived from timeline + index
   const currentActor = useMemo(() => {
-    if (!turnTimeline.length || turnIndex >= turnTimeline.length) return null;
-    return turnTimeline[turnIndex];
-  }, [turnTimeline, turnIndex]);
-
+    if (!turnTimeline.length || currentTurnIdx >= turnTimeline.length) return null;
+    return turnTimeline[currentTurnIdx];
+  }, [turnTimeline, currentTurnIdx]);
+ 
   const isPlayerTurn = useMemo(() => {
     return currentActor && !currentActor.isEnemy && !isProcessing;
   }, [currentActor, isProcessing]);
-
-  const advanceTurn = useCallback(() => {
-    const current = turnIndexRef.current;
-    const nextIndex = current + 1;
-    
-    // If we're running low on timeline, regenerate
-    if (nextIndex >= turnTimeline.length - 2) {
-      processedTurnsRef.current = new Set();
-      setTimelineOffset(prev => prev + 100);
-      setTurnIndex(0);
-      turnIndexRef.current = 0;
-    } else {
-      setTurnIndex(nextIndex);
-      turnIndexRef.current = nextIndex;
-    }
-    
+ 
+  // Advance turn: rebuild timeline from live state, reset to index 0
+  const advanceTurn = useCallback((liveParty, liveEnemies) => {
+    const newTimeline = rebuildTimeline(liveParty, liveEnemies);
+    setTurnTimeline(newTimeline);
+    setCurrentTurnIdx(0);
     setIsProcessing(false);
-    processingRef.current = false; // Release the lock
+    processingRef.current = false;
+    enemyActingRef.current = false;
     setSelectedMenu('main');
     setSelectedAction(null);
-  }, [turnTimeline.length]);
-
-  const handleVictory = useCallback(async () => {
-    if (showVictory) return;
-    setShowVictory(true);
-    
-    const totalXP = enemyState.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
-    const finalParty = partyState.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
-    
-    const result = await processVictory(totalXP, finalParty, defeatedMonsters);
-    setVictoryData({ ...result, totalXP });
-  }, [enemyState, partyState, processVictory, defeatedMonsters, showVictory]);
-
-  const addDamageNumber = useCallback((x, y, value, type = 'damage') => {
+  }, [rebuildTimeline]);
+ 
+  // --- Initialize ---
+  useEffect(() => {
+    if (combatData && !battleStarted) {
+      const initialParty = combatData.party.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp }));
+      const initialEnemies = combatData.enemies;
+      setPartyState(initialParty);
+      setEnemyState(initialEnemies);
+      setCombatLog([`Encountered ${combatData.enemies.map(e => e.name).join(', ')}!`]);
+      setBattleStarted(true);
+      setDefeatedMonsters([]);
+      processingRef.current = false;
+      enemyActingRef.current = false;
+      victoryCalledRef.current = false;
+ 
+      const timeline = rebuildTimeline(initialParty, initialEnemies);
+      setTurnTimeline(timeline);
+      setCurrentTurnIdx(0);
+    }
+  }, [combatData, battleStarted, rebuildTimeline]);
+ 
+  // --- Helpers ---
+  const addDamageNumber = useCallback((value, type = 'damage') => {
     const id = Date.now() + Math.random();
+    // Position: enemies on left (~450), party on right (~700)
+    const x = type === 'heal' ? 700 : 450;
+    const y = 200 + Math.random() * 80;
     setDamageNumbers(prev => [...prev, { id, x, y, value, type }]);
     setTimeout(() => setDamageNumbers(prev => prev.filter(d => d.id !== id)), 1000);
   }, []);
-
+ 
   const executeAttack = useCallback((attacker, target, multiplier = 1) => {
     const str = attacker.isEnemy ? (attacker.base_strength || 10) : (attacker.strength || 10);
     const def = target.isEnemy ? (target.base_vitality || 5) : (target.vitality || 5);
-    
     const baseDamage = Math.max(1, Math.floor((str * (1 + Math.random() * 0.4) * multiplier) - (def * 0.5)));
     const isCrit = Math.random() < 0.1;
     return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit };
   }, []);
-
-  // --- 2. EFFECTS (Combat Loop) ---
-
-  // Initialize
+ 
+  // --- Victory handler ---
+  const handleVictory = useCallback(async (finalParty, finalEnemies, finalDefeated) => {
+    if (victoryCalledRef.current) return;
+    victoryCalledRef.current = true;
+    setShowVictory(true);
+    const totalXP = finalEnemies.reduce((sum, e) => sum + (e.xp_reward || 25), 0);
+    const partyForSave = finalParty.map(p => ({ ...p, hp: p.current_hp, mp: p.current_mp }));
+    const result = await processVictory(totalXP, partyForSave, finalDefeated);
+    setVictoryData({ ...result, totalXP });
+  }, [processVictory]);
+ 
+  // --- Win/Lose check after state updates ---
   useEffect(() => {
-    if (combatData && !battleStarted) {
-      setPartyState(combatData.party.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp })));
-      setEnemyState(combatData.enemies);
-      setCombatLog([`Encountered ${combatData.enemies.map(e => e.name).join(', ')}!`]);
-      setTurnIndex(0);
-      setTimelineOffset(0);
-      setBattleStarted(true);
-      processedTurnsRef.current = new Set();
-      setDefeatedMonsters([]);
-      setIsProcessing(false);
-      processingRef.current = false;
-    }
-  }, [combatData, battleStarted]);
-
-  // Generate Stable Timeline
-  useEffect(() => {
-    if (!battleStarted || !combatData) return;
-    const newTimeline = calculateTurnOrder(combatData.party, combatData.enemies, timelineOffset, 20);
-    setTurnTimeline(newTimeline);
-  }, [timelineOffset, battleStarted, combatData]);
-
-  // Win/Lose check
-  useEffect(() => {
-    if (!battleStarted) return;
+    if (!battleStarted || showVictory || victoryCalledRef.current) return;
     const aliveParty = partyState.filter(p => p.current_hp > 0);
     const aliveEnemies = enemyState.filter(e => e.current_hp > 0);
-
+ 
     if (aliveParty.length === 0) {
       setCombatLog(prev => [...prev, 'Party defeated...']);
-      setTimeout(() => {
-        setGameState('overworld');
-        setCombatData(null);
-      }, 2000);
-    } else if (aliveEnemies.length === 0 && !showVictory) {
-      handleVictory();
+      setTimeout(() => { setGameState('overworld'); setCombatData(null); }, 2000);
+    } else if (aliveEnemies.length === 0) {
+      handleVictory(partyState, enemyState, defeatedMonsters);
     }
-  }, [partyState, enemyState, battleStarted, showVictory, handleVictory, setCombatData, setGameState]);
-
-  // Auto-skip dead actors
-  useEffect(() => {
-    if (!currentActor || !battleStarted || showVictory || isProcessing || processingRef.current) return;
-    
-    let isDead = false;
-    if (currentActor.isEnemy) {
-      const e = enemyState.find(x => x.encounter_id === currentActor.encounter_id);
-      if (!e || e.current_hp <= 0) isDead = true;
-    } else {
-      const p = partyState.find(x => (currentActor.type === 'player' ? x.type === 'player' : x.id === currentActor.id));
-      if (!p || p.current_hp <= 0) isDead = true;
-    }
-
-    if (isDead) {
-      const timer = setTimeout(() => advanceTurn(), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [currentActor, enemyState, partyState, battleStarted, showVictory, advanceTurn, isProcessing]);
-
-  // Enemy AI
-  const isEnemyActingRef = useRef(false);
+  }, [partyState, enemyState, battleStarted, showVictory, handleVictory, defeatedMonsters, setCombatData, setGameState]);
+ 
+  // --- Enemy AI ---
   useEffect(() => {
     if (!battleStarted || showVictory || !currentActor || !currentActor.isEnemy) return;
-    
-    const turnKey = `${turnIndex}-${timelineOffset}`;
-    if (processedTurnsRef.current.has(turnKey) || isEnemyActingRef.current) return;
-    
-    processedTurnsRef.current.add(turnKey);
-    isEnemyActingRef.current = true;
-    
-    const enemy = currentActor;
+    if (isProcessing || processingRef.current || enemyActingRef.current) return;
+ 
+    // Verify this enemy is still alive in live state
+    const liveEnemy = enemyState.find(e => e.encounter_id === currentActor.encounter_id);
+    if (!liveEnemy || liveEnemy.current_hp <= 0) {
+      // Skip dead enemy — advance with current live state
+      const newTimeline = rebuildTimeline(partyState, enemyState);
+      setTurnTimeline(newTimeline);
+      setCurrentTurnIdx(0);
+      return;
+    }
+ 
+    enemyActingRef.current = true;
+    setIsProcessing(true);
+    processingRef.current = true;
+ 
+    const enemy = liveEnemy;
+ 
     const timer = setTimeout(() => {
       setPartyState(prev => {
         const aliveParty = prev.filter(p => p.current_hp > 0);
         if (aliveParty.length === 0) return prev;
-        
+ 
         const target = aliveParty[Math.floor(Math.random() * aliveParty.length)];
-        const { damage, isCrit } = executeAttack(enemy, target);
-        
-        addDamageNumber(700, 250, damage, isCrit ? 'critical' : 'damage');
+        const { damage, isCrit } = executeAttack({ ...enemy, isEnemy: true }, target);
+ 
+        addDamageNumber(damage, isCrit ? 'critical' : 'damage');
         setCombatLog(l => [...l, `${enemy.name} attacks ${target.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
-        
-        return prev.map(p => {
+ 
+        const newParty = prev.map(p => {
           if ((target.type === 'player' && p.type === 'player') || (target.id && p.id === target.id)) {
             return { ...p, current_hp: Math.max(0, p.current_hp - damage) };
           }
           return p;
         });
+ 
+        // Advance after state settles
+        setTimeout(() => {
+          setEnemyState(currentEnemies => {
+            advanceTurn(newParty, currentEnemies);
+            return currentEnemies;
+          });
+        }, 600);
+ 
+        return newParty;
       });
-      
-      setTimeout(() => {
-        isEnemyActingRef.current = false;
-        advanceTurn();
-      }, 700);
     }, 800);
-    
+ 
     return () => clearTimeout(timer);
-  }, [turnIndex, timelineOffset, battleStarted, showVictory, currentActor, advanceTurn, executeAttack, addDamageNumber]);
-
-  // --- 3. PLAYER ACTIONS ---
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTurnIdx, turnTimeline, battleStarted, showVictory]);
+ 
+  // --- Player Actions ---
   const handleAction = async (action, target) => {
     if (isProcessing || !isPlayerTurn || processingRef.current) return;
     setIsProcessing(true);
     processingRef.current = true;
-
+ 
     const actor = currentActor;
-    
+ 
     if (action === 'attack') {
       const { damage, isCrit } = executeAttack(actor, target);
       const newHp = Math.max(0, target.current_hp - damage);
-      
-      if (isCrit) {
-        setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 300);
-      }
-
-      setEnemyState(prev => prev.map(e => 
+ 
+      const newDefeated = newHp <= 0 ? [...defeatedMonsters, target.id] : defeatedMonsters;
+      if (newHp <= 0) setDefeatedMonsters(newDefeated);
+ 
+      const newEnemies = enemyState.map(e =>
         e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e
-      ));
-      
-      if (newHp <= 0) setDefeatedMonsters(prev => [...prev, target.id]);
-      
-      addDamageNumber(450, 200, damage, isCrit ? 'critical' : 'damage');
+      );
+      setEnemyState(newEnemies);
+ 
+      addDamageNumber(damage, isCrit ? 'critical' : 'damage');
       setCombatLog(prev => [...prev, `${actor.name} attacks ${target.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
-      setTimeout(() => advanceTurn(), 600);
-    } 
+ 
+      setTimeout(() => advanceTurn(partyState, newEnemies), 600);
+    }
     else if (action === 'capture') {
       setCaptureTarget(target);
       setCaptureName(target.name);
       setShowCapture(true);
       setIsProcessing(false);
       processingRef.current = false;
-      return;
     }
     else if (action.type === 'ability') {
       const ability = action.ability;
       const actorMp = actor.current_mp || 0;
-      
+ 
       if (actorMp < ability.mp_cost) {
-        setCombatLog(prev => [...prev, `Not enough MP!`]);
+        setCombatLog(prev => [...prev, 'Not enough MP!']);
         setIsProcessing(false);
         processingRef.current = false;
         return;
       }
-      
-      setPartyState(prev => prev.map(p => {
+ 
+      const newParty = partyState.map(p => {
         if ((actor.type === 'player' && p.type === 'player') || (actor.id && p.id === actor.id)) {
           return { ...p, current_mp: Math.max(0, p.current_mp - ability.mp_cost) };
         }
         return p;
-      }));
-
+      });
+      setPartyState(newParty);
+ 
       if (ability.ability_type === 'heal' || ability.ability_type === 'heal_all') {
         const healAmount = Math.floor((actor.intelligence || 10) * 2 + 20);
+        let healedParty;
         if (ability.ability_type === 'heal_all') {
-          setPartyState(prev => prev.map(p => ({ ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) })));
-          addDamageNumber(700, 250, healAmount, 'heal');
+          healedParty = newParty.map(p => ({ ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) }));
+          addDamageNumber(healAmount, 'heal');
           setCombatLog(prev => [...prev, `${actor.name} heals everyone for ${healAmount}!`]);
         } else {
-          setPartyState(prev => prev.map(p => (target.type === 'player' ? p.type === 'player' : p.id === target.id) ? { ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) } : p));
-          addDamageNumber(700, 250, healAmount, 'heal');
+          healedParty = newParty.map(p =>
+            (target.type === 'player' ? p.type === 'player' : p.id === target.id)
+              ? { ...p, current_hp: Math.min(p.max_hp, p.current_hp + healAmount) }
+              : p
+          );
+          addDamageNumber(healAmount, 'heal');
           setCombatLog(prev => [...prev, `${actor.name} heals ${target.name} for ${healAmount}!`]);
         }
+        setPartyState(healedParty);
+        setTimeout(() => advanceTurn(healedParty, enemyState), 600);
       } else {
         const { damage, isCrit } = executeAttack(actor, target, ability.damage_multiplier);
         const newHp = Math.max(0, target.current_hp - damage);
-        
-        if (isCrit) {
-          setIsShaking(true);
-          setTimeout(() => setIsShaking(false), 300);
-        }
-
-        setEnemyState(prev => prev.map(e => e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e));
-        if (newHp <= 0) setDefeatedMonsters(prev => [...prev, target.id]);
-        
-        addDamageNumber(450, 200, damage, isCrit ? 'critical' : 'damage');
+ 
+        const newDefeated = newHp <= 0 ? [...defeatedMonsters, target.id] : defeatedMonsters;
+        if (newHp <= 0) setDefeatedMonsters(newDefeated);
+ 
+        const newEnemies = enemyState.map(e =>
+          e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e
+        );
+        setEnemyState(newEnemies);
+ 
+        addDamageNumber(damage, isCrit ? 'critical' : 'damage');
         setCombatLog(prev => [...prev, `${actor.name} uses ${ability.name} for ${damage}!${isCrit ? ' CRITICAL!' : ''}`]);
+        setTimeout(() => advanceTurn(newParty, newEnemies), 600);
       }
-      setTimeout(() => advanceTurn(), 600);
     }
     else if (action === 'flee') {
       setCombatLog(prev => [...prev, `${actor.name} flees!`]);
-      setTimeout(() => {
-        setGameState('overworld');
-        setCombatData(null);
-      }, 500);
+      setTimeout(() => { setGameState('overworld'); setCombatData(null); }, 500);
     }
-  };  const handleCapture = async () => {
+  };
+ 
+  const handleCapture = async () => {
     if (!captureTarget || !captureName.trim()) return;
     setIsProcessing(true);
-    
+ 
     const result = await captureMonster(captureTarget.id, captureName.trim());
-    
-  if (result.success) {
+ 
+    if (result.success) {
       setCombatLog(prev => [...prev, `Captured ${captureName}!`]);
-      setDefeatedMonsters(prev => [...prev, captureTarget.id]);
-      
-      setEnemyState(prev => {
-        const newState = prev.filter(e => e.encounter_id !== captureTarget.encounter_id);
-        // FORCE CHECK: If no enemies left after capture, trigger victory immediately
-        if (newState.length === 0) {
-          handleVictory();
-        }
-        return newState;
-      });
+      const newDefeated = [...defeatedMonsters, captureTarget.id];
+      setDefeatedMonsters(newDefeated);
+ 
+      const newEnemies = enemyState.filter(e => e.encounter_id !== captureTarget.encounter_id);
+      setEnemyState(newEnemies);
+ 
+      setShowCapture(false);
+      setCaptureTarget(null);
+      setCaptureName('');
+ 
+      setTimeout(() => advanceTurn(partyState, newEnemies), 600);
     } else {
       setCombatLog(prev => [...prev, result.message || 'Capture failed!']);
+      setShowCapture(false);
+      setCaptureTarget(null);
+      setCaptureName('');
+      setTimeout(() => advanceTurn(partyState, enemyState), 600);
     }
-    
-    setShowCapture(false);
-    setCaptureTarget(null);
-    setCaptureName('');
-    setTimeout(() => advanceTurn(), 600);
   };
-
+ 
   const handleContinue = () => {
     setGameState('overworld');
     setCombatData(null);
   };
-
+ 
   if (!combatData) return null;
-
-return (
+ 
+  // Visible timeline: skip any whose HP is 0 in live state for display
+  const visibleTimeline = turnTimeline.slice(0, 12).filter(turn => {
+    if (turn.isEnemy) {
+      const live = enemyState.find(e => e.encounter_id === turn.encounter_id);
+      return live && live.current_hp > 0;
+    } else {
+      const live = turn.type === 'player'
+        ? partyState.find(p => p.type === 'player')
+        : partyState.find(p => p.id === turn.id);
+      return live && live.current_hp > 0;
+    }
+  });
+ 
+  return (
     <div className="w-full h-full flex bg-slate-800 relative overflow-hidden" data-testid="combat-screen">
-      {/* Visual Background Layer - Brightened for visibility */}
       <div className="absolute inset-0 bg-slate-700/30 pointer-events-none" />
+ 
       {/* Turn Order - Left Panel */}
       <div className="w-20 bg-slate-900/90 border-r-2 border-slate-700 p-1 flex flex-col" data-testid="ctb-timeline">
         <div className="text-amber-400 text-[10px] font-bold mb-1 text-center">TURNS</div>
         <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
-          {turnTimeline.slice(turnIndex, turnIndex + 12).map((turn, idx) => (
-            <div 
+          {visibleTimeline.map((turn, idx) => (
+            <div
               key={`${turn.turnId}-${idx}`}
               className={`w-full h-12 rounded flex items-center justify-center border transition-all
-                ${idx === 0 
-                  ? 'border-amber-400 bg-amber-400/20 scale-105' 
-                  : turn.isEnemy 
-                    ? 'border-red-500/40 bg-red-900/20' 
+                ${idx === 0
+                  ? 'border-amber-400 bg-amber-400/20 scale-105'
+                  : turn.isEnemy
+                    ? 'border-red-500/40 bg-red-900/20'
                     : 'border-cyan-400/40 bg-cyan-900/20'
                 }`}
             >
               <div className="w-8 h-8">
-                {turn.isEnemy 
+                {turn.isEnemy
                   ? <MonsterSprite type={turn.sprite} size={32} />
                   : <PlayerSprite size={32} />
                 }
@@ -539,7 +537,7 @@ return (
           ))}
         </div>
       </div>
-
+ 
       {/* Main Area */}
       <div className="flex-1 flex flex-col">
         {/* Turn Banner */}
@@ -552,11 +550,11 @@ return (
             </div>
           )}
         </div>
-
+ 
         {/* Battle Field */}
         <div className="flex-1 flex items-center justify-around px-6 relative">
-          {/* Ground/Floor for perspective */}
           <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 w-4/5 h-20 bg-slate-800/20 rounded-[100%] blur-xl pointer-events-none" />
+ 
           {/* Enemies */}
           <div className="flex flex-col gap-4">
             {enemyState.filter(e => e.current_hp > 0).map((enemy, idx) => (
@@ -574,15 +572,15 @@ return (
               </div>
             ))}
           </div>
-
+ 
           <div className="text-3xl font-black text-amber-400/30">VS</div>
-
+ 
           {/* Party */}
           <div className="flex flex-col gap-3">
-            {partyState.filter(p => p.current_hp > 0).map((member, idx) => {
-              const isActive = currentActor && !currentActor.isEnemy && 
+            {partyState.filter(p => p.current_hp > 0).map((member) => {
+              const isActive = currentActor && !currentActor.isEnemy &&
                 ((currentActor.type === 'player' && member.type === 'player') || currentActor.id === member.id);
-              
+ 
               return (
                 <div key={member.type === 'player' ? 'player' : member.id} className={`relative transition-all duration-300 ${isActive ? 'scale-110' : ''}`}>
                   {isActive && <div className="absolute -left-6 top-1/2 -translate-y-1/2 text-lg animate-bounce">▶</div>}
@@ -593,7 +591,7 @@ return (
                     <div className="text-cyan-300 font-bold text-[10px]">{member.name}</div>
                     <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div className={`h-full transition-all duration-300 ${
-                        (member.current_hp / member.max_hp) > 0.5 ? 'bg-green-500' 
+                        (member.current_hp / member.max_hp) > 0.5 ? 'bg-green-500'
                         : (member.current_hp / member.max_hp) > 0.25 ? 'bg-yellow-500' : 'bg-red-500'
                       }`} style={{ width: `${(member.current_hp / member.max_hp) * 100}%` }} />
                     </div>
@@ -603,7 +601,7 @@ return (
               );
             })}
           </div>
-
+ 
           {/* Damage Numbers */}
           {damageNumbers.map(d => (
             <div key={d.id} className={`absolute text-xl font-black pointer-events-none animate-bounce
@@ -613,7 +611,7 @@ return (
             </div>
           ))}
         </div>
-
+ 
         {/* Bottom UI */}
         <div className="h-44 flex gap-2 p-2 bg-slate-900/80 border-t-2 border-slate-700">
           {/* Commands */}
@@ -624,17 +622,17 @@ return (
             <div className="p-1 max-h-32 overflow-y-auto">
               {isPlayerTurn && selectedMenu === 'main' && (
                 <div className="space-y-0.5">
-                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10"
                     onClick={() => setSelectedMenu('target-attack')} data-testid="attack-button">⚔️ Attack</button>
-                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10"
                     onClick={() => setSelectedMenu('abilities')} data-testid="abilities-button">✨ Abilities</button>
-                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10"
                     onClick={() => setSelectedMenu('target-capture')} data-testid="capture-button">🎯 Capture</button>
-                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10" 
+                  <button className="w-full text-left px-2 py-1.5 rounded text-white text-sm hover:bg-white/10"
                     onClick={() => handleAction('flee')} data-testid="flee-button">🏃 Flee</button>
                 </div>
               )}
-
+ 
               {isPlayerTurn && selectedMenu === 'abilities' && (
                 <div className="space-y-0.5">
                   {abilities.unlocked.length === 0 ? (
@@ -645,7 +643,7 @@ return (
                       onClick={() => {
                         if ((currentActor?.current_mp || 0) < ability.mp_cost) return;
                         setSelectedAction({ type: 'ability', ability });
-                        setSelectedMenu(ability.ability_type === 'heal' ? 'target-ally' : 'target-enemy');
+                        setSelectedMenu(ability.ability_type === 'heal' || ability.ability_type === 'heal_all' ? 'target-ally' : 'target-enemy');
                       }}>
                       ✨ {ability.name} ({ability.mp_cost}MP)
                     </button>
@@ -653,7 +651,7 @@ return (
                   <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" onClick={() => setSelectedMenu('main')}>← Back</button>
                 </div>
               )}
-
+ 
               {isPlayerTurn && (selectedMenu === 'target-attack' || selectedMenu === 'target-enemy') && (
                 <div className="space-y-0.5">
                   <div className="text-red-400 text-[10px] px-2">Target:</div>
@@ -663,11 +661,11 @@ return (
                       {e.name} ({e.current_hp}HP)
                     </button>
                   ))}
-                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" 
+                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10"
                     onClick={() => { setSelectedMenu('main'); setSelectedAction(null); }}>← Back</button>
                 </div>
               )}
-
+ 
               {isPlayerTurn && selectedMenu === 'target-capture' && (
                 <div className="space-y-0.5">
                   <div className="text-green-400 text-[10px] px-2">Capture (HP&lt;50%):</div>
@@ -682,7 +680,7 @@ return (
                   <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" onClick={() => setSelectedMenu('main')}>← Back</button>
                 </div>
               )}
-
+ 
               {isPlayerTurn && selectedMenu === 'target-ally' && (
                 <div className="space-y-0.5">
                   <div className="text-cyan-400 text-[10px] px-2">Heal:</div>
@@ -692,13 +690,13 @@ return (
                       {m.name} ({m.current_hp}/{m.max_hp})
                     </button>
                   ))}
-                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10" 
+                  <button className="w-full text-left px-2 py-1 rounded text-slate-400 text-xs hover:bg-white/10"
                     onClick={() => { setSelectedMenu('main'); setSelectedAction(null); }}>← Back</button>
                 </div>
               )}
             </div>
           </div>
-
+ 
           {/* Party Status */}
           <div className="flex-1 bg-slate-800/80 rounded-lg overflow-hidden border border-slate-600">
             <div className="bg-cyan-600 px-2 py-1 text-white text-xs font-bold">🛡️ Party</div>
@@ -727,7 +725,7 @@ return (
               ))}
             </div>
           </div>
-
+ 
           {/* Log */}
           <div className="w-48 bg-slate-800/80 rounded-lg overflow-hidden border border-slate-600">
             <div className="bg-amber-600 px-2 py-1 text-white text-xs font-bold">📜 Log</div>
@@ -739,7 +737,7 @@ return (
           </div>
         </div>
       </div>
-
+ 
       {/* Victory */}
       {showVictory && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
@@ -755,7 +753,7 @@ return (
           </div>
         </div>
       )}
-
+ 
       {/* Capture Modal */}
       {showCapture && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
@@ -766,7 +764,7 @@ return (
               placeholder="Name..." maxLength={20} data-testid="capture-name-input" />
             <div className="flex gap-2">
               <button className="flex-1 bg-green-500 text-white font-bold py-1.5 rounded hover:bg-green-400 text-sm" onClick={handleCapture} data-testid="confirm-capture-button">Capture!</button>
-              <button className="flex-1 bg-slate-700 text-white py-1.5 rounded hover:bg-slate-600 text-sm" onClick={() => { setShowCapture(false); setCaptureTarget(null); }}>Cancel</button>
+              <button className="flex-1 bg-slate-700 text-white py-1.5 rounded hover:bg-slate-600 text-sm" onClick={() => { setShowCapture(false); setCaptureTarget(null); processingRef.current = false; setIsProcessing(false); }}>Cancel</button>
             </div>
           </div>
         </div>
@@ -774,5 +772,5 @@ return (
     </div>
   );
 };
-
+ 
 export default CombatScreen;
