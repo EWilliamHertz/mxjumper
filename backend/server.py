@@ -1156,19 +1156,9 @@ async def combat_victory(request: Request):
             await conn.execute('UPDATE captured_allies SET xp=$1, level=$2, xp_to_next=$3, stat_points=stat_points+$4 WHERE id=$5', 
                                ally_xp, ally_level, ally_xp_next, ally_stats, ally['id'])
         
-        # Save Inventory if items dropped
-        if items_dropped:
-            raw_inv = await conn.fetchval('SELECT inventory FROM players WHERE id = $1', player['id'])
-            current_inv = raw_inv if isinstance(raw_inv, list) else json.loads(raw_inv) if raw_inv else []
-            for item in items_dropped:
-                existing = next((i for i in current_inv if i.get('name') == item['name']), None)
-                if existing:
-                    existing['quantity'] = existing.get('quantity', 1) + 1
-                else:
-                    current_inv.append({**item, 'quantity': 1})
-            await conn.execute('UPDATE players SET inventory = $1 WHERE id = $2', json.dumps(current_inv), player['id'])
-
-        updated_player = await conn.fetchrow('SELECT * FROM players WHERE id = $1', player['id'])
+# Save Inventory using Manager
+        for item in items_dropped:
+            await InventoryManager.add_item(conn, player['id'], item)        updated_player = await conn.fetchrow('SELECT * FROM players WHERE id = $1', player['id'])
         return {
             "xp_gained": xp_gained,
             "gold_earned": gold_earned,
@@ -1415,14 +1405,13 @@ async def buy_from_npc(npc_id: int, request: Request):
     
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
-        player = await conn.fetchrow('SELECT id, gold, strength, vitality FROM players WHERE user_id = $1', user['id'])
+        player = await conn.fetchrow('SELECT id, gold FROM players WHERE user_id = $1', user['id'])
         npc = await conn.fetchrow('SELECT * FROM npcs WHERE id = $1', npc_id)
         
         if not npc or npc['npc_type'] != 'shop':
             raise HTTPException(status_code=404, detail="Shop not found")
         
         shop_items = json.loads(npc['shop_items']) if isinstance(npc['shop_items'], str) else npc['shop_items']
-        
         if item_index >= len(shop_items):
             raise HTTPException(status_code=400, detail="Invalid item")
         
@@ -1430,13 +1419,13 @@ async def buy_from_npc(npc_id: int, request: Request):
         if player['gold'] < item['price']:
             raise HTTPException(status_code=400, detail="Not enough gold")
         
-        # Deduct gold and add to inventory in one go
         async with conn.transaction():
+            # 1. Deduct Gold
             await conn.execute('UPDATE players SET gold = gold - $1 WHERE id = $2', item['price'], player['id'])
             
-            # If it's gear/item, add to inventory. If it's a direct consumable, apply effect.
+            # 2. Handle Item Effect
+            # If it's gear (Strength/Vitality), it goes to inventory.
             if item.get('effect') in ['strength', 'vitality']:
-                # Adding gear to inventory so it doesn't disappear!
                 await InventoryManager.add_item(conn, player['id'], item)
             else:
                 # Instant consumables (Potions)
@@ -1444,8 +1433,8 @@ async def buy_from_npc(npc_id: int, request: Request):
                     await conn.execute('UPDATE players SET hp = LEAST(hp + $1, max_hp) WHERE id = $2', item['value'], player['id'])
                 elif item['effect'] == 'mp':
                     await conn.execute('UPDATE players SET mp = LEAST(mp + $1, max_mp) WHERE id = $2', item['value'], player['id'])
-        
-        return {"success": True, "message": f"Purchased {item['name']}!", "gold_remaining": player['gold'] - item['price']}
+
+        return {"success": True, "message": f"Purchased {item['name']}!"}
 
 # ==================== QUEST ENDPOINTS ====================
 
@@ -1660,13 +1649,15 @@ async def websocket_endpoint(websocket: WebSocket, player_id: int):
                     "wager": wager
                 })
             
-            elif msg.get('type') == 'trade_request':
+            elif msg.get('type') == 'pvp_action':
                 target_id = msg.get('target_id')
-                await manager.send_to(target_id, {
-                    "type": "trade_request",
-                    "from_id": player_id,
-                    "from_name": msg.get('name', 'Unknown')
-                })
+                if target_id:
+                    await manager.send_to(target_id, {
+                        "type": "pvp_action",
+                        "action": msg.get('action'),
+                        "payload": msg.get('payload'),
+                        "from_id": player_id
+                    })
                 
     except WebSocketDisconnect:
         manager.disconnect(player_id)

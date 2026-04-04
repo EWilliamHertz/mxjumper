@@ -1153,7 +1153,15 @@ export const Overworld = () => {
               <div className="text-white text-sm font-semibold mt-1">{n.from_name}</div>
               {n.type === 'duel_request' && <div className="text-amber-300 text-xs mt-1">Wager: {n.wager || 100}G</div>}
               <div className="flex gap-2 mt-3">
-                <button className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-bold py-1 rounded" onClick={() => { clearNotification(i); }}>ACCEPT</button>
+                <button className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-bold py-1 rounded" 
+  onClick={() => { 
+    if (n.type === 'duel_request') {
+      acceptDuel(n.from_id, n.wager);
+    }
+    clearNotification(i); 
+  }}>
+  ACCEPT
+</button>
                 <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-[9px] font-bold py-1 rounded" onClick={() => clearNotification(i)}>DECLINE</button>
               </div>
             </div>

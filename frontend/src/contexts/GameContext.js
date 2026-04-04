@@ -292,15 +292,22 @@ export const GameProvider = ({ children }) => {
     }
   }, [getAuthHeader, player]);
 
-  const acceptFriend = useCallback(async (requestId) => {
+  const acceptDuel = useCallback(async (challengerId, wager) => {
     try {
-      const { data } = await axios.post(`${API}/friends/accept/${requestId}`, {}, { headers: getAuthHeader() });
-      await fetchFriends();
+      // Trigger the backend to deduct gold and notify both players to start
+      const { data } = await axios.post(`${API}/combat/start-duel`, 
+        { opponent_id: player.id, wager }, // Note: We call it on the challenger
+        { headers: getAuthHeader(), params: { opponent_id: challengerId, wager } }
+      );
+      
+      if (data.success) {
+        setGameState('combat');
+      }
       return data;
     } catch (err) {
       return { success: false, error: err.response?.data?.detail };
     }
-  }, [getAuthHeader, fetchFriends]);
+  }, [getAuthHeader, player]);
 
   // NPCs
   const fetchNpcs = useCallback(async (zone) => {
@@ -409,8 +416,25 @@ export const GameProvider = ({ children }) => {
           setNotifications(prev => [...prev, {
             type: 'duel_request',
             from_name: data.from_name,
-            from_id: data.from_id
+            from_id: data.from_id,
+            wager: data.wager
           }]);
+        }
+        
+        if (data.type === 'pvp_start') {
+          setCombatData({
+            party: data.party.map(p => ({ ...p, current_hp: p.hp, current_mp: p.mp })),
+            enemies: data.enemies.map(e => ({ ...e, current_hp: e.hp, current_mp: e.mp })),
+            isPvP: true,
+            wager: data.wager,
+            opponentId: data.enemies.find(e => e.type === 'player')?.id
+          });
+          setGameState('combat');
+        }
+
+        if (data.type === 'pvp_action') {
+          // Send a signal to CombatScreen.js that the opponent moved
+          window.dispatchEvent(new CustomEvent('pvp_move', { detail: data }));
         }
         
         if (data.type === 'trade_request') {
