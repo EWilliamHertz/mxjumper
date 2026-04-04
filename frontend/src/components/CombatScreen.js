@@ -4,16 +4,15 @@ import { useGame } from '../contexts/GameContext';
 // ─── Turn Order ────────────────────────────────────────────────────────────────
 const buildTimeline = (party, enemies, count = 20) => {
   const alive = [
-    ...party.filter(p => p.current_hp > 0).map(p => ({ ...p, isEnemy: false })),
-    ...enemies.filter(e => e.current_hp > 0).map(e => ({ ...e, isEnemy: true })),
+    ...party.filter(p => p.current_hp > 0).map((p, idx) => ({ ...p, isEnemy: false, unique_id: p.type === 'player' ? 'hero' : `ally_${p.id}_${idx}` })),
+    ...enemies.filter(e => e.current_hp > 0).map((e, idx) => ({ ...e, isEnemy: true, unique_id: e.encounter_id || `enemy_${idx}` })),
   ];
   if (!alive.length) return [];
  
   const waiters = {};
   alive.forEach(c => {
-    const id = c.isEnemy ? c.encounter_id : (c.type === 'player' ? 'player' : `ally_${c.id}`);
     const agi = c.isEnemy ? (c.base_agility || 8) : (c.agility || 10);
-    waiters[id] = { c, wait: 100 / Math.max(1, agi) };
+    waiters[c.unique_id] = { c, wait: 100 / Math.max(1, agi) };
   });
  
   const result = [];
@@ -23,13 +22,15 @@ const buildTimeline = (party, enemies, count = 20) => {
       if (!pick || w.wait < pick.wait) pick = w;
     });
     if (!pick) break;
-    result.push({ ...pick.c });
+    
+    // We must push a cloned object AND store the unique_id so the UI knows who it is
+    result.push({ ...pick.c, turnId: pick.c.unique_id });
+    
     const agi = pick.c.isEnemy ? (pick.c.base_agility || 8) : (pick.c.agility || 10);
     pick.wait += 100 / Math.max(1, agi);
   }
   return result;
-};
- 
+}; 
 // ─── Sprites ───────────────────────────────────────────────────────────────────
 const SPRITES = {
   slime:    <><ellipse cx="32" cy="48" rx="24" ry="12" fill="#1a5a1a"/><ellipse cx="32" cy="38" rx="22" ry="22" fill="#44dd44"/><ellipse cx="32" cy="35" rx="18" ry="18" fill="#66ff66"/><ellipse cx="26" cy="32" rx="4" ry="5" fill="#000"/><ellipse cx="38" cy="32" rx="4" ry="5" fill="#000"/><ellipse cx="27" cy="31" rx="2" ry="2" fill="#fff"/><ellipse cx="39" cy="31" rx="2" ry="2" fill="#fff"/></>,
@@ -112,8 +113,7 @@ export const CombatScreen = () => {
   };
  
   // ── advance: the single place that moves to the next turn ──
-  // Takes the freshest snapshots as arguments to avoid stale closures
-  const advance = useCallback((newParty, newEnemies, newDefeated) => {
+  const advance = useCallback((newParty, newEnemies, newDefeated, forceRecalculate = false) => {
     if (victoryFired.current) return;
  
     const aliveP = newParty.filter(m => m.current_hp > 0);
@@ -128,16 +128,32 @@ export const CombatScreen = () => {
     if (aliveE.length === 0) {
       victoryFired.current = true;
       setPhase('done');
-      // Victory handled in separate effect below
       return;
     }
  
-    const tl = buildTimeline(aliveP, aliveE);
-    setTimeline(tl);
-    const next = tl[0];
-    if (!next) return;
-    setPhase(next.isEnemy ? 'enemy' : 'player');
-    if (!next.isEnemy) { setMenu('main'); setQueued(null); }
+    setTimeline(prevTimeline => {
+      let nextTimeline = forceRecalculate ? [] : [...prevTimeline].slice(1); // Pop the finished turn
+      
+      // Filter out dead people from the upcoming turns
+      nextTimeline = nextTimeline.filter(t => {
+        if (t.isEnemy) return aliveE.some(e => e.encounter_id === t.encounter_id);
+        if (t.type === 'player') return aliveP.some(p => p.type === 'player');
+        return aliveP.some(p => p.id === t.id);
+      });
+
+      // If we are running out of turns, generate a fresh batch
+      if (nextTimeline.length < 5) {
+        nextTimeline = buildTimeline(aliveP, aliveE, 20);
+      }
+      
+      const nextActor = nextTimeline[0];
+      if (nextActor) {
+        setPhase(nextActor.isEnemy ? 'enemy' : 'player');
+        if (!nextActor.isEnemy) { setMenu('main'); setQueued(null); }
+      }
+      
+      return nextTimeline;
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setGameState, setCombatData]);
  
@@ -222,8 +238,7 @@ export const CombatScreen = () => {
     if (newHp <= 0) setDefeated(newDefeated);
     const newEnemies = enemies.map(e => e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e);
     setEnemies(newEnemies);
-    setTimeout(() => advance(party, newEnemies, newDefeated), 500);
-  };
+setTimeout(() => advance(party, newEnemies, newDefeated, newHp <= 0), 500);  };
  
   const doAbility = (ability, target) => {
     if (phase !== 'player') return;
@@ -263,8 +278,7 @@ export const CombatScreen = () => {
       if (newHp <= 0) setDefeated(newDefeated);
       const newEnemies = enemies.map(e => e.encounter_id === target.encounter_id ? { ...e, current_hp: newHp } : e);
       setEnemies(newEnemies);
-      setTimeout(() => advance(newParty, newEnemies, newDefeated), 500);
-    }
+setTimeout(() => advance(newParty, newEnemies, newDefeated, newHp <= 0), 500);    }
   };
  
   const doCapture = async () => {
