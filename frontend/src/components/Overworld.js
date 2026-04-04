@@ -411,20 +411,20 @@ export const Overworld = () => {
   // Auto-save position and map
   useEffect(() => {
     const saveInterval = setInterval(() => {
-      if (player && playerState) {
-        updatePosition(playerState.x, playerState.y, currentMap);
+      if (player) {
+        updatePosition(playerRef.current.x, playerRef.current.y, currentMap);
         lastSaveRef.current = Date.now();
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(saveInterval);
-  }, [player, playerState, updatePosition, currentMap]);
+  }, [player, updatePosition, currentMap]);
  
   // Save on map change
   useEffect(() => {
     if (player) {
-      updatePosition(playerState.x, playerState.y, currentMap);
+      updatePosition(playerRef.current.x, playerRef.current.y, currentMap);
     }
-  }, [currentMap, player, playerState.x, playerState.y, updatePosition]);
+  }, [currentMap, player, updatePosition]);
  
   // Fetch NPCs when entering village
   useEffect(() => {
@@ -473,7 +473,7 @@ export const Overworld = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [showChat, chatInput, sendChatMessage, setGameState, healParty, updatePosition, playerState, currentMap, npcDialog]);
+  }, [showChat, chatInput, sendChatMessage, setGameState, healParty, updatePosition, currentMap, npcDialog]);
  
   const checkExits = useCallback((x, y, keys) => {
     const playerWidth = 40; const playerHeight = 56;
@@ -495,22 +495,24 @@ export const Overworld = () => {
   const checkEncounter = useCallback(async () => {
     if (mapData.noEncounters) return;
     if (Math.random() < ENCOUNTER_CHANCE) {
-      updatePosition(playerState.x, playerState.y, currentMap);
+      updatePosition(playerRef.current.x, playerRef.current.y, currentMap);
       await startEncounter(mapData.encounterZone || 'forest');
     }
-  }, [startEncounter, updatePosition, playerState.x, playerState.y, mapData, currentMap]);
+  }, [startEncounter, updatePosition, mapData, currentMap]);
  
   const checkNpcInteraction = useCallback(() => {
     if (!mapData.npcs) return null;
     const playerWidth = 40;
+    const pX = playerRef.current.x;
+    const pY = playerRef.current.y;
     
     for (const npc of mapData.npcs) {
-      if (Math.abs(playerState.x + playerWidth/2 - npc.x) < 50 && Math.abs(playerState.y - npc.y) < 60) {
+      if (Math.abs(pX + playerWidth/2 - npc.x) < 50 && Math.abs(pY - npc.y) < 60) {
         return npc;
       }
     }
     return null;
-  }, [mapData, playerState]);
+  }, [mapData]);
  // Game loop (Refactored to use Ref to fix extreme lag)
   useEffect(() => {
     const canvas = canvasRef.current;
