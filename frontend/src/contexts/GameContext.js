@@ -160,6 +160,8 @@ export const GameProvider = ({ children }) => {
         axios.get(`${API}/monsters/random?zone=${zone}`, { headers: getAuthHeader() })
       ]);
       
+      if (!enemiesResponse.data.length) return { success: false, error: 'No monsters in this zone' };
+      
       // Record encounter in bestiary
       const monsterIds = enemiesResponse.data.map(e => e.id);
       axios.post(`${API}/bestiary/encounter`, { monster_ids: monsterIds }, { headers: getAuthHeader() }).catch(() => {});
@@ -186,14 +188,13 @@ export const GameProvider = ({ children }) => {
       await fetchPlayer();
       await fetchParty();
       await fetchAllies();
-      // Remove setGameState and setCombatData from here. 
-      // The CombatScreen will handle this when you click "Continue".
+      await fetchQuests();
       
       return victoryData.data;
     } catch (err) {
       return { success: false, error: err.response?.data?.detail };
     }
-  }, [getAuthHeader, fetchPlayer, fetchParty, fetchAllies]);
+  }, [getAuthHeader, fetchPlayer, fetchParty, fetchAllies, fetchQuests]);
 
   // Capture monster
   const captureMonster = useCallback(async (monsterId, name) => {

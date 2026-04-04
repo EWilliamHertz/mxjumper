@@ -109,13 +109,18 @@ Build a 2D side-scrolling platformer hub (MapleStory style) with basic physics. 
 - Chat: GET /api/chat/messages, POST /api/chat/send
 - WS: /api/ws/{player_id}
 
+### Bug Fixes (April 2026)
+- Quest HUD auto-refresh after combat — processVictory now calls fetchQuests so active quest progress updates immediately without relog
+- Zone-locked encounters — removed fallback that pulled random-zone monsters when a zone had no dedicated creatures; empty zones now skip encounters cleanly
+
 ## P1 Backlog
+- PvP WebSocket engine (duel wager → waiting_for_opponent → combat actions)
 - Equipment/inventory system
 - More quest types and storyline
 - Class system (Warrior/Mage/Ranger/Healer)
 
 ## P2 Backlog
-- Trade system UI, Duel PvP
+- Trade system UI
 - Guild system
 - Boss monsters and dungeon maps
 - See ROADMAP.md for 6-month MMORPG plan
