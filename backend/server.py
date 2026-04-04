@@ -1101,27 +1101,11 @@ async def combat_victory(request: Request):
             WHERE id = $9
         ''', new_xp, new_level, xp_to_next, stat_points_gained, skill_points_gained, gold_earned, hp_bonus, mp_bonus, player['id'])
         
-        for monster_id in defeated_monsters:
-            await conn.execute('UPDATE player_bestiary SET times_defeated = times_defeated + 1 WHERE player_id = $1 AND monster_id = $2', player['id'], monster_id)
-        
-        allies = await conn.fetch('SELECT * FROM captured_allies WHERE player_id = $1 AND in_party = TRUE', player['id'])
-        for ally in allies:
-            ally_xp = ally['xp'] + xp_gained
-            ally_level = ally['level']
-            ally_xp_to_next = ally['xp_to_next']
-            ally_stat_points = 0
-            while ally_xp >= ally_xp_to_next:
-                ally_xp -= ally_xp_to_next
-                ally_level += 1
-                ally_stat_points += 3
-                ally_xp_to_next = int(ally_xp_to_next * 1.5)
-            await conn.execute('UPDATE captured_allies SET xp = $1, level = $2, xp_to_next = $3, stat_points = stat_points + $4 WHERE id = $5', ally_xp, ally_level, ally_xp_to_next, ally_stat_points, ally['id'])
-        
-        if level_ups > 0:
-            await conn.execute('INSERT INTO entity_abilities (player_id, ability_id) SELECT $1, id FROM abilities WHERE required_level <= $2 AND id NOT IN (SELECT ability_id FROM entity_abilities WHERE player_id = $1) ON CONFLICT DO NOTHING', player['id'], new_level)
-
+        # Process every monster for Bestiary, Quests, and Loot
+        items_dropped = []
         import random
         import json
+        
         loot_table = [
             {"name": "Health Potion", "type": "consumable", "effect": "heal", "value": 50, "rarity": "common", "icon": "💊", "drop_rate": 0.4},
             {"name": "Mana Potion", "type": "consumable", "effect": "mp", "value": 30, "rarity": "common", "icon": "🧪", "drop_rate": 0.35},
@@ -1132,29 +1116,53 @@ async def combat_victory(request: Request):
             {"name": "Magic Crystal", "type": "material", "rarity": "rare", "icon": "💎", "drop_rate": 0.05},
             {"name": "Phoenix Feather", "type": "material", "rarity": "epic", "icon": "🪶", "drop_rate": 0.02},
         ]
-        
-        items_dropped = []
-        for _ in defeated_monsters:
+
+        for monster_id in defeated_monsters:
+            # 1. Normalize ID (in case encounter_id 'enemy_0_1' is passed)
+            try:
+                m_id = int(str(monster_id).split('_')[-1])
+            except:
+                continue
+
+            # 2. Update Bestiary
+            await conn.execute('UPDATE player_bestiary SET times_defeated = times_defeated + 1 WHERE player_id = $1 AND monster_id = $2', player['id'], m_id)
+            
+            # 3. Update Quest Progress
+            await conn.execute('''
+                UPDATE player_quests 
+                SET progress = LEAST(progress + 1, (SELECT required_count FROM quests WHERE id = quest_id))
+                WHERE player_id = $1 AND completed = FALSE
+                AND quest_id IN (SELECT id FROM quests WHERE required_monster_id = $2)
+            ''', player['id'], m_id)
+
+            # 4. Roll for Loot
             for item in loot_table:
                 if random.random() < item["drop_rate"]:
-                    drop = {k: v for k, v in item.items() if k != "drop_rate"}
-                    items_dropped.append(drop)
-                    
+                    items_dropped.append({k: v for k, v in item.items() if k != "drop_rate"})
+
+        # Update Allies XP
+        allies = await conn.fetch('SELECT * FROM captured_allies WHERE player_id = $1 AND in_party = TRUE', player['id'])
+        for ally in allies:
+            ally_xp, ally_level, ally_xp_next, ally_stats = ally['xp'] + xp_gained, ally['level'], ally['xp_to_next'], 0
+            while ally_xp >= ally_xp_next:
+                ally_xp -= ally_xp_next
+                ally_level += 1
+                ally_stats += 3
+                ally_xp_next = int(ally_xp_next * 1.5)
+            await conn.execute('UPDATE captured_allies SET xp=$1, level=$2, xp_to_next=$3, stat_points=stat_points+$4 WHERE id=$5', 
+                               ally_xp, ally_level, ally_xp_next, ally_stats, ally['id'])
+        
+        # Save Inventory if items dropped
         if items_dropped:
-            current_inv_str = await conn.fetchval('SELECT inventory FROM players WHERE id = $1', player['id'])
-            current_inv = json.loads(current_inv_str) if current_inv_str and isinstance(current_inv_str, str) else current_inv_str if current_inv_str else []
+            raw_inv = await conn.fetchval('SELECT inventory FROM players WHERE id = $1', player['id'])
+            current_inv = raw_inv if isinstance(raw_inv, list) else json.loads(raw_inv) if raw_inv else []
             for item in items_dropped:
-                found = False
-                for existing in current_inv:
-                    if existing.get('name') == item['name']:
-                        existing['quantity'] = existing.get('quantity', 1) + 1
-                        found = True
-                        break
-                if not found:
-                    item_copy = dict(item)
-                    item_copy['quantity'] = 1
-                    current_inv.append(item_copy)
-            await conn.execute('UPDATE players SET inventory = $1::jsonb WHERE id = $2', json.dumps(current_inv), player['id'])
+                existing = next((i for i in current_inv if i.get('name') == item['name']), None)
+                if existing:
+                    existing['quantity'] = existing.get('quantity', 1) + 1
+                else:
+                    current_inv.append({**item, 'quantity': 1})
+            await conn.execute('UPDATE players SET inventory = $1 WHERE id = $2', json.dumps(current_inv), player['id'])
 
         updated_player = await conn.fetchrow('SELECT * FROM players WHERE id = $1', player['id'])
         return {
@@ -1367,6 +1375,28 @@ async def interact_npc(npc_id: int, request: Request):
         if npc_dict.get('shop_items') and isinstance(npc_dict['shop_items'], str):
             npc_dict['shop_items'] = json.loads(npc_dict['shop_items'])
         
+        # Check for completed quests first
+        ready_quests = await conn.fetch('''
+            SELECT pq.id, q.name, q.reward_gold, q.reward_xp 
+            FROM player_quests pq
+            JOIN quests q ON pq.quest_id = q.id
+            WHERE pq.player_id = $1 AND q.npc_id = $2 
+            AND pq.completed = FALSE AND pq.progress >= q.required_count
+        ''', player['id'], npc_id)
+        
+        if ready_quests:
+            for rq in ready_quests:
+                await conn.execute('UPDATE player_quests SET completed = TRUE WHERE id = $1', rq['id'])
+                await conn.execute('UPDATE players SET gold = gold + $1, xp = xp + $2 WHERE id = $3', 
+                                   rq['reward_gold'], rq['reward_xp'], player['id'])
+            
+            return {
+                "success": True, 
+                "type": "quest_complete", 
+                "message": f"Quest Complete! You earned gold and XP from {npc['name']}.",
+                "npc": npc_dict
+            }
+
         if npc['npc_type'] == 'healer':
             await conn.execute('UPDATE players SET hp = max_hp, mp = max_mp WHERE id = $1', player['id'])
             await conn.execute('UPDATE captured_allies SET hp = max_hp, mp = max_mp WHERE player_id = $1', player['id'])
