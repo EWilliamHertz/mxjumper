@@ -190,7 +190,7 @@ export const Overworld = () => {
   const [isMuted, setIsMuted] = useState(true);
  
   const { 
-    player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition,
+    player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition, fetchPlayer,
     chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
     interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest,
     spendSkillPoint
@@ -272,9 +272,12 @@ export const Overworld = () => {
  
   const mapData = MAPS[currentMap];
  
-  // Load saved position
+  // Load saved position (re-fetch when returning from combat)
   useEffect(() => {
     if (player) {
+      // Ensure we have fresh position data when entering the overworld
+      if (fetchPlayer) fetchPlayer();
+      
       setCurrentMap(player.current_map || 'forest');
       setPlayerState(prev => ({
         ...prev,
@@ -282,7 +285,7 @@ export const Overworld = () => {
         y: player.position_y || 400,
       }));
     }
-  }, [player]);
+  }, [player, fetchPlayer]);
  
   // Auto-save position and map
   useEffect(() => {
