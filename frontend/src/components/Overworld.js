@@ -333,7 +333,8 @@ export const Overworld = () => {
   const [npcDialog, setNpcDialog] = useState(null);
   
   const [gameTime, setGameTime] = useState(0); 
-  const [showInventory, setShowInventory] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('mxjumper_tutorial'));
   const [showSkillTree, setShowSkillTree] = useState(false); 
   const [showGuildMenu, setShowGuildMenu] = useState(false); 
   const [duelSetup, setDuelSetup] = useState(null); 
@@ -395,13 +396,17 @@ export const Overworld = () => {
   // Global Menu Keybinds
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key.toLowerCase() === 'i') setShowInventory(prev => !prev);
+      if (e.key.toLowerCase() === 'i' && !npcDialog) {
+        updatePosition(playerRef.current.x, playerRef.current.y, currentMap);
+        setGameState('menu');
+      }
+      if (e.key.toLowerCase() === 'm' && !npcDialog) setShowMap(prev => !prev);
       if (e.key.toLowerCase() === 'k') setShowSkillTree(prev => !prev);
       if (e.key.toLowerCase() === 'g') setShowGuildMenu(prev => !prev);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [npcDialog, updatePosition, currentMap, setGameState]);
  
   const mapData = MAPS[currentMap];
  
@@ -463,10 +468,7 @@ export const Overworld = () => {
       if (key === 'escape') {
         setShowEntityMenu(false);
         setNpcDialog(null);
-      }
-      if (key === 'm' && !npcDialog) {
-        updatePosition(playerRef.current.x, playerRef.current.y, currentMap);
-        setGameState('menu');
+        setShowMap(false);
       }
       if (key === 'h') healParty();
       if (key === 'e' && npcDialog) setNpcDialog(null);
@@ -1071,15 +1073,52 @@ export const Overworld = () => {
         </div>
       )}
  
-      {/* Inventory Modal */}
-      {showInventory && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-900 border-4 border-slate-700 rounded-xl z-50 p-4 shadow-2xl flex flex-col">
-          <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
-            <h2 className="text-amber-500 font-bold text-lg">Inventory</h2>
-            <button onClick={() => setShowInventory(false)} className="text-white hover:text-red-500 font-bold">X</button>
+      {/* World Map Modal */}
+      {showMap && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-slate-900 border-4 border-slate-700 rounded-xl z-50 p-6 shadow-2xl flex flex-col">
+          <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-4">
+            <h2 className="text-cyan-400 font-bold text-xl uppercase tracking-widest">World Map</h2>
+            <button onClick={() => setShowMap(false)} className="text-slate-400 hover:text-red-500 font-bold text-xl">X</button>
           </div>
-          <div className="grid grid-cols-4 gap-2 flex-1 overflow-y-auto">
-            <div className="col-span-4 text-center text-slate-500 text-sm mt-10">Your bag is empty. Go hunt!</div>
+          <div className="flex-1 relative bg-slate-800 rounded-lg border border-slate-600 overflow-hidden flex items-center justify-center">
+             <div className="text-slate-500 text-center">
+                <p className="text-lg font-bold text-slate-400 mb-2">Map of MXJumper</p>
+                <p className="text-sm">You are currently in: <span className="text-amber-400 font-bold">{MAPS[currentMap]?.name}</span></p>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                   <div className="bg-slate-700 p-2 rounded">Emerald Forest</div>
+                   <div className="bg-slate-700 p-2 rounded">Slimy Bog</div>
+                   <div className="bg-slate-700 p-2 rounded">Crystal Cave</div>
+                   <div className="bg-slate-700 p-2 rounded">Rocky Mountain</div>
+                   <div className="bg-slate-700 p-2 rounded">Peaceful Village</div>
+                   <div className="bg-slate-700 p-2 rounded">Dead Wasteland</div>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tutorial / Introduction Modal */}
+      {showTutorial && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
+          <div className="w-[500px] bg-slate-900 border-4 border-amber-500 rounded-2xl p-6 shadow-[0_0_50px_rgba(245,158,11,0.3)]">
+            <h1 className="text-3xl font-black text-amber-400 mb-4 text-center uppercase tracking-widest">Welcome to MXJumper!</h1>
+            <div className="space-y-4 text-sm text-slate-300 mb-6 max-h-[300px] overflow-y-auto pr-2">
+              <p>⚔️ <strong className="text-white">COMBAT & EXPLORATION:</strong> Use <strong className="text-amber-400">WASD</strong> to move and jump. Run around outside safe zones to encounter monsters. Defeat them to earn XP and Gold!</p>
+              <p>🗺️ <strong className="text-white">MAP:</strong> Press <strong className="text-amber-400">M</strong> to view the world map and see where you are.</p>
+              <p>🎒 <strong className="text-white">MENU & INVENTORY:</strong> Press <strong className="text-amber-400">I</strong> to open your Main Menu. Here you can allocate stat points, manage your party, and view your inventory.</p>
+              <p>🐾 <strong className="text-white">ALLIES:</strong> Weaken monsters in battle and click "Capture" to add them to your team!</p>
+              <p>🌟 <strong className="text-white">SKILLS & GUILDS:</strong> Press <strong className="text-amber-400">K</strong> for the Skill Tree and <strong className="text-amber-400">G</strong> for Guilds.</p>
+              <p className="text-cyan-400 font-bold text-center mt-4">Good luck on your adventure!</p>
+            </div>
+            <button 
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black py-3 rounded-xl uppercase tracking-widest transition-all"
+              onClick={() => {
+                localStorage.setItem('mxjumper_tutorial', 'true');
+                setShowTutorial(false);
+              }}
+            >
+              Start Playing
+            </button>
           </div>
         </div>
       )}
@@ -1120,7 +1159,7 @@ export const Overworld = () => {
           {isMuted ? '🔈 Unmute' : '🔊 Muting'}
         </button>
         <div className="bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-1 text-slate-300 text-xs">
-          <span className="text-amber-400">WASD</span>: Move | <span className="text-amber-400">M</span>: Menu
+          <span className="text-amber-400">WASD</span>: Move | <span className="text-amber-400">I</span>: Menu | <span className="text-amber-400">M</span>: Map
         </div>
       </div>
  

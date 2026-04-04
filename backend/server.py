@@ -300,7 +300,7 @@ async def seed_data():
     async with db_pool.acquire() as conn:
         # Seed monsters with zones - use upsert to handle existing data
         monsters = [
-            ('Slime', 40, 10, 6, 5, 3, 8, 'slime', 0.5, 20, 'forest', 'A bouncy green slime.'),
+            ('Slime', 40, 10, 6, 5, 3, 8, 'slime', 0.5, 20, 'slime', 'A bouncy green slime.'),
             ('Mushroom', 50, 30, 7, 6, 12, 10, 'mushroom', 0.45, 30, 'forest', 'A magical forest mushroom.'),
             ('Wolf', 70, 10, 12, 15, 4, 9, 'wolf', 0.3, 40, 'forest', 'A fierce gray wolf.'),
             ('Bat', 35, 20, 5, 18, 8, 4, 'bat', 0.4, 25, 'cave', 'A swift cave bat.'),
@@ -747,6 +747,7 @@ async def get_random_encounter(zone: str = 'forest'):
         
         difficulty_map = {
             "forest": 0.4,
+            "slime": 0.4,
             "cave": 0.8,
             "mountain": 1.0,
             "wasteland": 1.5,

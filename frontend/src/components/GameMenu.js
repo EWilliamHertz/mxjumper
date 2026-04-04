@@ -55,6 +55,17 @@ export const GameMenu = () => {
   const [message, setMessage] = useState('');
   const [selectedBestiaryEntry, setSelectedBestiaryEntry] = useState(null);
 
+  // Close Menu with 'I' or 'Escape'
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'escape') {
+        setGameState('overworld');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setGameState]);
+
   useEffect(() => {
     fetchPlayer();
     fetchAllies();
@@ -104,6 +115,7 @@ export const GameMenu = () => {
 
   const TABS = [
     { id: 'stats', label: 'Stats' },
+    { id: 'inventory', label: 'Inventory' },
     { id: 'party', label: 'Party' },
     { id: 'abilities', label: 'Abilities' },
     { id: 'allies', label: 'Allies' },
@@ -135,7 +147,7 @@ export const GameMenu = () => {
               onClick={() => setGameState('overworld')}
               data-testid="close-menu-button"
             >
-              🎮 Return [M]
+              🎮 Return [I]
             </button>
           </div>
         </div>
@@ -298,9 +310,51 @@ export const GameMenu = () => {
                 )}
               </div>
             </div>
-          )}
+          )}
 
-          {/* Party Tab */}
+
+
+
+          {/* Inventory Tab */}
+          {activeTab === 'inventory' && (
+            <div data-testid="inventory-panel">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-amber-500">🎒 Your Inventory</h2>
+                <div className="bg-amber-500/20 text-amber-400 px-4 py-2 rounded-xl font-bold">
+                  Gold: {player?.gold || 0}G
+                </div>
+              </div>
+              
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 min-h-[300px]">
+                {player?.inventory && player.inventory.length > 0 ? (
+                  <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+                    {player.inventory.map((item, idx) => (
+                      <div key={idx} className="bg-slate-900 border border-slate-600 rounded-lg p-2 flex flex-col items-center justify-center hover:border-amber-400 cursor-pointer group relative">
+                        <div className="text-2xl mb-1">{item.icon || '📦'}</div>
+                        <div className="text-white text-[10px] font-bold text-center truncate w-full">{item.name}</div>
+                        {item.quantity > 1 && (
+                          <div className="absolute -bottom-2 -right-2 bg-slate-700 text-white text-[10px] px-1.5 rounded-full font-bold">
+                            x{item.quantity}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full pt-12 text-slate-500">
+                    <div className="text-6xl mb-4 opacity-50">🎒</div>
+                    <h3 className="text-xl font-bold text-slate-400 mb-2">Your bag is empty</h3>
+                    <p className="text-sm">Defeat monsters or visit shops in the village to get items.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+
+
+
+          {/* Party Tab */}
           {activeTab === 'party' && (
             <div data-testid="party-panel">
               <h2 className="text-xl font-bold text-cyan-400 mb-4">👥 Current Party (Max 4 members)</h2>
