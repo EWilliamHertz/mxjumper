@@ -1076,20 +1076,16 @@ async def combat_victory(request: Request):
             skill_points_gained += 1
             xp_to_next = int(xp_to_next * 1.5)
             
-        # Calculate gold from individual monster drops
         total_gold = 0
         for mid in defeated_monsters:
             monster = await conn.fetchrow('SELECT gold_drop FROM monsters WHERE id = $1', mid)
             total_gold += (monster['gold_drop'] if monster else 20)
-        tax_paid = 0
         
+        tax_paid = 0
         zone_owner = await conn.fetchrow('SELECT id, name FROM guilds WHERE claimed_zone = $1', current_map)
         if zone_owner and player['guild_id'] != zone_owner['id']:
             tax_paid = int(total_gold * 0.05)
-            await conn.execute('''
-                UPDATE guilds SET bank_balance = bank_balance + $1, 
-                total_tax_collected = total_tax_collected + $1 WHERE id = $2
-            ''', tax_paid, zone_owner['id'])
+            await conn.execute('UPDATE guilds SET bank_balance = bank_balance + $1 WHERE id = $2', tax_paid, zone_owner['id'])
 
         gold_earned = total_gold - tax_paid
         hp_bonus = level_ups * 10
@@ -1107,67 +1103,61 @@ async def combat_victory(request: Request):
         ''', new_xp, new_level, xp_to_next, stat_points_gained, skill_points_gained, gold_earned, hp_bonus, mp_bonus, player['id'])
         
         for monster_id in defeated_monsters:
-            await conn.execute('''
-                UPDATE player_quests pq SET progress = progress + 1
-                FROM quests q
-                WHERE pq.quest_id = q.id AND pq.player_id = $1 AND q.required_monster_id = $2 AND pq.completed = FALSE
-            ''', player['id'], monster_id)
-            
-            await conn.execute('''
-                INSERT INTO player_bestiary (player_id, monster_id, encountered, times_defeated)
-                VALUES ($1, $2, TRUE, 1)
-                ON CONFLICT (player_id, monster_id) DO UPDATE SET times_defeated = player_bestiary.times_defeated + 1
-            ''', player['id'], monster_id)
+            await conn.execute('UPDATE player_bestiary SET times_defeated = times_defeated + 1 WHERE player_id = $1 AND monster_id = $2', player['id'], monster_id)
         
         allies = await conn.fetch('SELECT * FROM captured_allies WHERE player_id = $1 AND in_party = TRUE', player['id'])
-        ally_level_ups = []
         for ally in allies:
             ally_xp = ally['xp'] + xp_gained
             ally_level = ally['level']
             ally_xp_to_next = ally['xp_to_next']
             ally_stat_points = 0
-            
             while ally_xp >= ally_xp_to_next:
                 ally_xp -= ally_xp_to_next
                 ally_level += 1
                 ally_stat_points += 3
                 ally_xp_to_next = int(ally_xp_to_next * 1.5)
-                ally_level_ups.append({"id": ally['id'], "name": ally['name'], "new_level": ally_level})
-            
-            await conn.execute('''
-                UPDATE captured_allies SET xp = $1, level = $2, xp_to_next = $3, stat_points = stat_points + $4
-                WHERE id = $5
-            ''', ally_xp, ally_level, ally_xp_to_next, ally_stat_points, ally['id'])
+            await conn.execute('UPDATE captured_allies SET xp = $1, level = $2, xp_to_next = $3, stat_points = stat_points + $4 WHERE id = $5', ally_xp, ally_level, ally_xp_to_next, ally_stat_points, ally['id'])
         
-    if level_ups > 0:
-            await conn.execute('''
-                INSERT INTO entity_abilities (player_id, ability_id)
-                SELECT $1, id FROM abilities 
-                WHERE required_level <= $2 
-                AND id NOT IN (SELECT ability_id FROM entity_abilities WHERE player_id = $1)
-            ''', player['id'], new_level)
+        if level_ups > 0:
+            await conn.execute('INSERT INTO entity_abilities (player_id, ability_id) SELECT $1, id FROM abilities WHERE required_level <= $2 AND id NOT IN (SELECT ability_id FROM entity_abilities WHERE player_id = $1) ON CONFLICT DO NOTHING', player['id'], new_level)
 
-        # Generate loot drops
-        import random as rng
+        import random
+        import json
         loot_table = [
-            {"name": "Health Potion", "type": "consumable", "rarity": "common", "drop_rate": 0.4},
-            {"name": "Mana Potion", "type": "consumable", "rarity": "common", "drop_rate": 0.35},
-            {"name": "Capture Orb", "type": "consumable", "rarity": "uncommon", "drop_rate": 0.15},
-            {"name": "Iron Sword", "type": "weapon", "rarity": "uncommon", "drop_rate": 0.08},
-            {"name": "Steel Armor", "type": "armor", "rarity": "uncommon", "drop_rate": 0.08},
-            {"name": "Monster Fang", "type": "material", "rarity": "common", "drop_rate": 0.3},
-            {"name": "Magic Crystal", "type": "material", "rarity": "rare", "drop_rate": 0.05},
-            {"name": "Phoenix Feather", "type": "material", "rarity": "epic", "drop_rate": 0.02},
+            {"name": "Health Potion", "type": "consumable", "effect": "heal", "value": 50, "rarity": "common", "icon": "💊", "drop_rate": 0.4},
+            {"name": "Mana Potion", "type": "consumable", "effect": "mp", "value": 30, "rarity": "common", "icon": "🧪", "drop_rate": 0.35},
+            {"name": "Capture Orb", "type": "consumable", "rarity": "uncommon", "icon": "🔮", "drop_rate": 0.15},
+            {"name": "Iron Sword", "type": "weapon", "rarity": "uncommon", "icon": "⚔️", "drop_rate": 0.08},
+            {"name": "Steel Armor", "type": "armor", "rarity": "uncommon", "icon": "🛡️", "drop_rate": 0.08},
+            {"name": "Monster Fang", "type": "material", "rarity": "common", "icon": "🦷", "drop_rate": 0.3},
+            {"name": "Magic Crystal", "type": "material", "rarity": "rare", "icon": "💎", "drop_rate": 0.05},
+            {"name": "Phoenix Feather", "type": "material", "rarity": "epic", "icon": "🪶", "drop_rate": 0.02},
         ]
+        
         items_dropped = []
         for _ in defeated_monsters:
             for item in loot_table:
-                if rng.random() < item["drop_rate"]:
-                    items_dropped.append({"name": item["name"], "type": item["type"], "rarity": item["rarity"]})
-        
-        # Fetch updated player for frontend
+                if random.random() < item["drop_rate"]:
+                    drop = {k: v for k, v in item.items() if k != "drop_rate"}
+                    items_dropped.append(drop)
+                    
+        if items_dropped:
+            current_inv_str = await conn.fetchval('SELECT inventory FROM players WHERE id = $1', player['id'])
+            current_inv = json.loads(current_inv_str) if current_inv_str and isinstance(current_inv_str, str) else current_inv_str if current_inv_str else []
+            for item in items_dropped:
+                found = False
+                for existing in current_inv:
+                    if existing.get('name') == item['name']:
+                        existing['quantity'] = existing.get('quantity', 1) + 1
+                        found = True
+                        break
+                if not found:
+                    item_copy = dict(item)
+                    item_copy['quantity'] = 1
+                    current_inv.append(item_copy)
+            await conn.execute('UPDATE players SET inventory = $1::jsonb WHERE id = $2', json.dumps(current_inv), player['id'])
+
         updated_player = await conn.fetchrow('SELECT * FROM players WHERE id = $1', player['id'])
-        
         return {
             "xp_gained": xp_gained,
             "gold_earned": gold_earned,
@@ -1177,7 +1167,6 @@ async def combat_victory(request: Request):
             "new_level": new_level,
             "level_ups": level_ups,
             "stat_points_gained": stat_points_gained,
-            "ally_level_ups": ally_level_ups,
             "updated_player": {
                 "level": updated_player['level'],
                 "xp": updated_player['xp'],
@@ -1189,8 +1178,7 @@ async def combat_victory(request: Request):
                 "gold": updated_player['gold'],
                 "stat_points": updated_player['stat_points'],
             }
-        }    
-@api_router.post("/combat/save-state")
+        }        @api_router.post("/combat/save-state")
 async def save_combat_state(request: Request):
     body = await request.json()
     party_state = body.get('party', [])
