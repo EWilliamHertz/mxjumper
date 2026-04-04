@@ -137,6 +137,11 @@ export const GameProvider = ({ children }) => {
   // Update position with map
   const updatePosition = useCallback(async (x, y, currentMap = null) => {
     if (player) {
+      // Optimistically save to session storage to prevent rubber-banding on remount
+      sessionStorage.setItem(`mxjumper_x_${player.id}`, x);
+      sessionStorage.setItem(`mxjumper_y_${player.id}`, y);
+      if (currentMap) sessionStorage.setItem(`mxjumper_map_${player.id}`, currentMap);
+      
       try {
         const payload = { x, y };
         if (currentMap) payload.current_map = currentMap;

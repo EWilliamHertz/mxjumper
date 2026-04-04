@@ -67,7 +67,7 @@ const PlayerSprite = ({ size = 64 }) => (
  
 // ─── Component ─────────────────────────────────────────────────────────────────
 export const CombatScreen = () => {
-  const { combatData, setCombatData, processVictory, captureMonster, setGameState, abilities } = useGame();
+  const { combatData, setCombatData, processVictory, captureMonster, setGameState, abilities, fetchQuests } = useGame();
  
   const [party,    setParty]    = useState([]);
   const [enemies,  setEnemies]  = useState([]);
@@ -122,7 +122,11 @@ export const CombatScreen = () => {
     if (aliveP.length === 0) {
       addLog('Party was defeated...');
       setPhase('done');
-      setTimeout(() => { setGameState('overworld'); setCombatData(null); }, 2000);
+      setTimeout(() => { 
+        if (fetchQuests) fetchQuests();
+        setGameState('overworld'); 
+        setCombatData(null); 
+      }, 2000);
       return;
     }
     if (aliveE.length === 0) {
@@ -302,7 +306,11 @@ setTimeout(() => advance(newParty, newEnemies, newDefeated, newHp <= 0), 500);  
  
   const doFlee = () => {
     addLog('Fled from battle!');
-    setTimeout(() => { setGameState('overworld'); setCombatData(null); }, 500);
+    setTimeout(() => { 
+      if (fetchQuests) fetchQuests();
+      setGameState('overworld'); 
+      setCombatData(null); 
+    }, 500);
   };
  
   if (!combatData) return null;
@@ -568,7 +576,11 @@ setTimeout(() => advance(newParty, newEnemies, newDefeated, newHp <= 0), 500);  
               <p className="text-green-400 font-bold animate-pulse mb-2">LEVEL UP! → Lv{victory.new_level}</p>
             )}
             <button className="w-full mt-4 bg-amber-500 hover:bg-amber-400 text-white font-bold py-2 rounded-lg"
-              onClick={()=>{ setGameState('overworld'); setCombatData(null); }}
+              onClick={()=>{ 
+                if (fetchQuests) fetchQuests();
+                setGameState('overworld'); 
+                setCombatData(null); 
+              }}
               data-testid="continue-button">Continue</button>
           </div>
         </div>

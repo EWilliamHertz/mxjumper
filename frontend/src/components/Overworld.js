@@ -415,9 +415,13 @@ export const Overworld = () => {
   // Load saved position (re-fetch when returning from combat)
   useEffect(() => {
     if (player && !isInitializedRef.current) {
-      setCurrentMap(player.current_map || 'forest');
-      playerRef.current.x = player.position_x || 100;
-      playerRef.current.y = player.position_y || 400;
+      const savedMap = sessionStorage.getItem(`mxjumper_map_${player.id}`);
+      const savedX = sessionStorage.getItem(`mxjumper_x_${player.id}`);
+      const savedY = sessionStorage.getItem(`mxjumper_y_${player.id}`);
+
+      setCurrentMap(savedMap || player.current_map || 'forest');
+      playerRef.current.x = savedX ? parseFloat(savedX) : (player.position_x || 100);
+      playerRef.current.y = savedY ? parseFloat(savedY) : (player.position_y || 400);
       
       // Lock it so background saves don't rubber-band the player back
       isInitializedRef.current = true; 
