@@ -748,75 +748,91 @@ export const Overworld = () => {
     ctx.fillText(name, x + 20, y - 8);
   };
  
-  // Render
+  // Canvas render loop — runs every frame via requestAnimationFrame, independent of React state.
+  // Reads player position from playerRef.current so it reflects physics updates every frame,
+  // not just when React state changes (which was causing the black screen with gameTime).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    mapData.bgGradient.forEach((color, i) => {
-      skyGradient.addColorStop(i / (mapData.bgGradient.length - 1), color);
-    });
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    mapData.decorations.forEach(dec => {
-      if (dec.type === 'cloud') drawCloud(ctx, dec.x, dec.y);
-      if (dec.type === 'tree') drawTree(ctx, dec.x, dec.y);
-      if (dec.type === 'bush') drawBush(ctx, dec.x, dec.y);
-      if (dec.type === 'stalactite') drawStalactite(ctx, dec.x, dec.y);
-    });
-    
-    mapData.platforms.forEach(platform => {
-      if (platform.type === 'ground') {
-        ctx.fillStyle = '#8B4513';
-        ctx.fillRect(platform.x, platform.y + 10, platform.width, platform.height - 10);
-        ctx.fillStyle = '#228B22';
-        ctx.fillRect(platform.x, platform.y, platform.width, 15);
-      } else if (platform.type === 'grass') {
-        ctx.fillStyle = '#8B4513';
-        ctx.fillRect(platform.x, platform.y + 6, platform.width, platform.height - 6);
-        ctx.fillStyle = '#228B22';
-        ctx.fillRect(platform.x, platform.y, platform.width, 10);
-      } else if (platform.type === 'stone') {
-        ctx.fillStyle = '#708090';
-        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-      }
-    });
-    
-    mapData.exits.forEach(exit => {
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
-      ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
-      ctx.fillStyle = '#FFD700';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(exit.label, exit.x + exit.width / 2, exit.y - 5);
-      
+
+    let animationId;
+
+    const renderFrame = () => {
+      const ctx = canvas.getContext('2d');
+
+      // Background
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      mapData.bgGradient.forEach((color, i) => {
+        skyGradient.addColorStop(i / (mapData.bgGradient.length - 1), color);
+      });
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Decorations
+      mapData.decorations.forEach(dec => {
+        if (dec.type === 'cloud') drawCloud(ctx, dec.x, dec.y);
+        if (dec.type === 'tree') drawTree(ctx, dec.x, dec.y);
+        if (dec.type === 'bush') drawBush(ctx, dec.x, dec.y);
+        if (dec.type === 'stalactite') drawStalactite(ctx, dec.x, dec.y);
+      });
+
+      // Platforms
+      mapData.platforms.forEach(platform => {
+        if (platform.type === 'ground') {
+          ctx.fillStyle = '#8B4513';
+          ctx.fillRect(platform.x, platform.y + 10, platform.width, platform.height - 10);
+          ctx.fillStyle = '#228B22';
+          ctx.fillRect(platform.x, platform.y, platform.width, 15);
+        } else if (platform.type === 'grass') {
+          ctx.fillStyle = '#8B4513';
+          ctx.fillRect(platform.x, platform.y + 6, platform.width, platform.height - 6);
+          ctx.fillStyle = '#228B22';
+          ctx.fillRect(platform.x, platform.y, platform.width, 10);
+        } else if (platform.type === 'stone') {
+          ctx.fillStyle = '#708090';
+          ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+        }
+      });
+
+      // Exits — read position from ref so the [Press E] prompt updates every frame
+      const p = playerRef.current;
       const pWidth = 40; const pHeight = 56;
-      if (playerState.x + pWidth > exit.x && playerState.x < exit.x + exit.width &&
-          playerState.y + pHeight > exit.y && playerState.y < exit.y + exit.height) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText('[Press E]', exit.x + exit.width / 2, exit.y - 18);
+      mapData.exits.forEach(exit => {
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+        ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(exit.label, exit.x + exit.width / 2, exit.y - 5);
+
+        if (p.x + pWidth > exit.x && p.x < exit.x + exit.width &&
+            p.y + pHeight > exit.y && p.y < exit.y + exit.height) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText('[Press E]', exit.x + exit.width / 2, exit.y - 18);
+        }
+      });
+
+      // NPCs
+      if (mapData.npcs) {
+        mapData.npcs.forEach(npc => drawNPC(ctx, npc));
       }
-    });
-    
-    if (mapData.npcs) {
-      mapData.npcs.forEach(npc => drawNPC(ctx, npc));
-    }
-    
-    Object.values(otherPlayers).forEach(other => {
-      if (other.current_map === currentMap) {
-        drawPlayer(ctx, other.x, other.y, other.facing || 'right', 0, other.name, false);
-      }
-    });
-    
-    const p = playerRef.current;
-    drawPlayer(ctx, p.x, p.y, p.facing, p.frame, player?.name || 'Player', true);
-    
-  // Canvas re-renders only when actual game state changes (map, players, time)
-  }, [otherPlayers, player, mapData, currentMap, gameTime, checkNpcInteraction, drawNPC]);
+
+      // Other players
+      Object.values(otherPlayers).forEach(other => {
+        if (other.current_map === currentMap) {
+          drawPlayer(ctx, other.x, other.y, other.facing || 'right', 0, other.name, false);
+        }
+      });
+
+      // Main player — always read from ref for up-to-date physics position
+      drawPlayer(ctx, p.x, p.y, p.facing, p.frame, player?.name || 'Player', true);
+
+      animationId = requestAnimationFrame(renderFrame);
+    };
+
+    animationId = requestAnimationFrame(renderFrame);
+    return () => cancelAnimationFrame(animationId);
+  }, [mapData, otherPlayers, player, currentMap, checkNpcInteraction, drawNPC]);
  
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>
