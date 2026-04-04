@@ -304,7 +304,7 @@ export const CombatScreen = () => {
     const first = tl[0];
     setPhase(first?.isEnemy ? 'enemy' : 'player');
     if (first && !first.isEnemy) { setMenu('main'); setQueued(null); }
-  }, [combatData]);
+  }, [combatData, fetchAbilities]);
  
   // ── victory fire ──
   useEffect(() => {
