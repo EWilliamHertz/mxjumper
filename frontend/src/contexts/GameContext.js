@@ -429,12 +429,14 @@ export const GameProvider = ({ children }) => {
   }, [player]);
 
   // Send multiplayer request
-  const sendMultiplayerRequest = useCallback((type, targetId) => {
+  const sendMultiplayerRequest = useCallback((type, targetId, data = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN && player) {
       wsRef.current.send(JSON.stringify({
         type: type,
         name: player.name,
-        target_id: targetId
+        player_id: player.id,
+        target_id: targetId,
+        ...data
       }));
     }
   }, [player]);

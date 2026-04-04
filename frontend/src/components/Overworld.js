@@ -915,6 +915,32 @@ export const Overworld = () => {
         </div>
       )}
  
+      {/* Trade Modal */}
+      {selectedEntity?.type === 'player' && showEntityMenu && selectedEntity.inTrade && (
+        <div className=\"absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-950 border-4 border-green-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(34,197,94,0.3)] flex flex-col\">
+           <h2 className=\"text-xl text-green-400 font-black uppercase tracking-widest text-center mb-2\">Trade with {selectedEntity.name}</h2>
+           <div className=\"grid grid-cols-2 gap-4 mb-4\">
+             <div className=\"bg-slate-900 p-4 rounded-lg border border-slate-700\">
+               <div className=\"text-green-400 text-sm font-bold mb-2\">Your Offer</div>
+               <div className=\"space-y-1 max-h-32 overflow-y-auto text-xs text-slate-300\">
+                 <p>Your party is ready</p>
+                 <p className=\"text-amber-400\">Gold: {player?.gold || 0}G</p>
+               </div>
+             </div>
+             <div className=\"bg-slate-900 p-4 rounded-lg border border-slate-700\">
+               <div className=\"text-green-400 text-sm font-bold mb-2\">Their Offer</div>
+               <div className=\"space-y-1 max-h-32 overflow-y-auto text-xs text-slate-300\">
+                 <p>Waiting for trade details...</p>
+               </div>
+             </div>
+           </div>
+           <div className=\"flex gap-2\">
+             <button className=\"flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest\" onClick={() => { sendMultiplayerRequest('trade_accept', selectedEntity.id); setShowEntityMenu(false); }}>Accept Trade</button>
+             <button className=\"flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded uppercase text-xs\" onClick={() => setShowEntityMenu(false)}>Decline</button>
+           </div>
+        </div>
+      )}
+
       {/* Guilds Menu */}
       {showGuildMenu && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[450px] bg-slate-950 border-4 border-indigo-500 rounded-xl z-50 p-6 shadow-[0_0_40px_rgba(99,102,241,0.3)] flex flex-col">
@@ -1002,18 +1028,31 @@ export const Overworld = () => {
         </div>
       )}
  
-      {/* Notifications */}
-      <div className="absolute top-32 right-4 flex flex-col gap-2 z-50 pointer-events-none">
-        {notifications.map((n, i) => (
-          <div key={n.id || i} className="w-64 bg-slate-900/95 border-l-4 border-amber-500 p-3 shadow-2xl pointer-events-auto">
-            <div className="text-amber-400 font-bold text-[10px] uppercase tracking-widest">{n.type.replace('_', ' ')}</div>
-            <div className="text-white text-xs my-1">{n.from_name} wants to interact.</div>
-            <div className="flex gap-1 mt-2">
-              <button className="flex-1 bg-amber-600 text-white text-[9px] font-bold py-1 rounded hover:bg-amber-500" onClick={() => clearNotification(i)}>ACCEPT</button>
-              <button className="flex-1 bg-slate-700 text-white text-[9px] font-bold py-1 rounded hover:bg-slate-600" onClick={() => clearNotification(i)}>IGNORE</button>
+      {/* Notifications - Top Right */}
+      <div className="absolute top-4 right-20 flex flex-col gap-2 z-50 pointer-events-none">
+        {notifications.length > 0 && (
+          <div className="flex items-center justify-end mb-2 pointer-events-auto">
+            <div className="bg-red-600 text-white text-xs font-bold rounded-full px-2 py-1 mr-2">
+              {notifications.length}
             </div>
+            <span className="text-2xl">🔔</span>
           </div>
-        ))}
+        )}
+        {notifications.map((n, i) => {
+          const borderColor = n.type === 'duel_request' ? 'border-l-4 border-red-500' : n.type === 'trade_request' ? 'border-l-4 border-green-500' : 'border-l-4 border-amber-500';
+          const titleColor = n.type === 'duel_request' ? 'text-red-400' : n.type === 'trade_request' ? 'text-green-400' : 'text-amber-400';
+          return (
+            <div key={n.id || i} className={'w-72 bg-slate-900/95 ' + borderColor + ' p-4 shadow-2xl pointer-events-auto rounded'}>
+              <div className={titleColor + ' font-bold text-[10px] uppercase tracking-widest'}>{n.type.replace(/_/g, ' ')}</div>
+              <div className="text-white text-sm font-semibold mt-1">{n.from_name}</div>
+              {n.type === 'duel_request' && <div className="text-amber-300 text-xs mt-1">Wager: {n.wager || 100}G</div>}
+              <div className="flex gap-2 mt-3">
+                <button className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-bold py-1 rounded" onClick={() => { clearNotification(i); }}>ACCEPT</button>
+                <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-[9px] font-bold py-1 rounded" onClick={() => clearNotification(i)}>DECLINE</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
  
       {/* Controls & Sound */}
