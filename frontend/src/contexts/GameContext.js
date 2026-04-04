@@ -17,6 +17,7 @@ export const useGame = () => {
 export const GameProvider = ({ children }) => {
   const { user } = useAuth();
   const [player, setPlayer] = useState(null);
+  const [playerLoading, setPlayerLoading] = useState(true);
   const [party, setParty] = useState([]);
   const [allies, setAllies] = useState([]);
   const [abilities, setAbilities] = useState({ unlocked: [], available: [], locked: [] });
@@ -40,12 +41,15 @@ export const GameProvider = ({ children }) => {
   // Fetch player data
   const fetchPlayer = useCallback(async () => {
     try {
+      setPlayerLoading(true);
       const { data } = await axios.get(`${API}/player`, { headers: getAuthHeader() });
       setPlayer(data);
       return data;
     } catch (err) {
       if (err.response?.status === 404) setPlayer(null);
       return null;
+    } finally {
+      setPlayerLoading(false);
     }
   }, [getAuthHeader]);
 
@@ -454,7 +458,7 @@ export const GameProvider = ({ children }) => {
 
   return (
     <GameContext.Provider value={{
-      player, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications, bestiary,
+      player, playerLoading, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications, bestiary,
       setGameState, setCombatData,
       fetchPlayer, createPlayer, fetchParty, fetchAllies, fetchAbilities,
       toggleParty, allocateStats, unlockAbility,

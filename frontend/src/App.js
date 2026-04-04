@@ -24,7 +24,12 @@ const LoadingScreen = () => (
 
 // Game content router
 const GameContent = () => {
-  const { player, gameState } = useGame();
+  const { player, playerLoading, gameState } = useGame();
+
+  // Still loading player data
+  if (playerLoading) {
+    return <LoadingScreen />;
+  }
 
   // No player created yet
   if (!player) {
