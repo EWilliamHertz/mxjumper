@@ -311,7 +311,9 @@ export const Overworld = () => {
   } = useGame();
   
   const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
-  const [playerState, setPlayerState] = useState({
+  
+  // Use a Ref for physics to prevent 60fps React re-renders (Fixes severe lag)
+  const playerRef = useRef({
     x: player?.position_x || 100,
     y: player?.position_y || 400,
     vx: 0,
@@ -321,6 +323,8 @@ export const Overworld = () => {
     stepCounter: 0,
     frame: 0
   });
+  // We keep a lightweight state just to force occasional UI updates if needed
+  const [uiTrigger, setUiTrigger] = useState(0); 
   
   const [chatInput, setChatInput] = useState('');
   const [showChat, setShowChat] = useState(true);
@@ -336,7 +340,7 @@ export const Overworld = () => {
   
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
- 
+ const lastWsRef = useRef(Date.now()); // NEW: Throttles WebSocket messages
   // Background Music Mapping
   const MAP_MUSIC = useMemo(() => ({
     forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
@@ -507,8 +511,7 @@ export const Overworld = () => {
     }
     return null;
   }, [mapData, playerState]);
- 
-  // Game loop
+ // Game loop (Refactored to use Ref to fix extreme lag)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -520,59 +523,91 @@ export const Overworld = () => {
       const keys = keysRef.current;
       frameCount++;
       
-      if (!npcDialog) {
-        setPlayerState(prev => {
-          let { x, y, vx, vy, onGround, facing, stepCounter, frame } = prev;
-          
-          vx = 0;
-          if (keys['a']) { vx = -MOVE_SPEED; facing = 'left'; }
-          if (keys['d']) { vx = MOVE_SPEED; facing = 'right'; }
-          
-          if ((keys[' '] || keys['w']) && onGround) {
-            vy = JUMP_FORCE;
-            onGround = false;
-          }
-          
-          vy += GRAVITY;
-          x += vx;
-          y += vy;
-          
-          if (Math.abs(vx) > 0) {
-            if (frameCount % 8 === 0) frame = (frame + 1) % 4;
-          } else frame = 0;
-          
-          if (Math.abs(vx) > 0 && onGround && !mapData.noEncounters) {
-            stepCounter++;
-            if (stepCounter >= ENCOUNTER_STEPS) {
-              stepCounter = 0;
-              checkEncounter();
+      if (!npcDialog && !showEntityMenu && !showInventory && !showSkillTree && !showGuildMenu && !duelSetup) {
+        let p = playerRef.current;
+        p.vx = 0;
+        
+        if (keys['a']) { p.vx = -MOVE_SPEED; p.facing = 'left'; }
+        if (keys['d']) { p.vx = MOVE_SPEED; p.facing = 'right'; }
+        
+        if ((keys[' '] || keys['w']) && p.onGround) {
+          p.vy = JUMP_FORCE;
+          p.onGround = false;
+        }
+        
+        p.vy += GRAVITY;
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        if (Math.abs(p.vx) > 0) {
+          if (frameCount % 8 === 0) p.frame = (p.frame + 1) % 4;
+        } else p.frame = 0;
+        
+        if (Math.abs(p.vx) > 0 && p.onGround && !mapData.noEncounters) {
+          p.stepCounter++;
+          if (p.stepCounter >= ENCOUNTER_STEPS) {
+            p.stepCounter = 0;
+            // Save position right before encounter
+            updatePosition(p.x, p.y, currentMap);
+            if (Math.random() < ENCOUNTER_CHANCE) {
+               startEncounter(mapData.encounterZone || 'forest');
             }
           }
-          
-          onGround = false;
-          const playerWidth = 40;
-          const playerHeight = 56;
-          
-          for (const platform of mapData.platforms) {
-            if (
-              x + playerWidth > platform.x &&
-              x < platform.x + platform.width &&
-              y + playerHeight >= platform.y &&
-              y + playerHeight <= platform.y + platform.height + vy + 1 &&
-              vy >= 0
-            ) {
-              y = platform.y - playerHeight;
-              vy = 0;
-              onGround = true;
+        }
+        
+        p.onGround = false;
+        const pWidth = 40; const pHeight = 56;
+        
+        for (const platform of mapData.platforms) {
+          if (
+            p.x + pWidth > platform.x &&
+            p.x < platform.x + platform.width &&
+            p.y + pHeight >= platform.y &&
+            p.y + pHeight <= platform.y + platform.height + p.vy + 1 &&
+            p.vy >= 0
+          ) {
+            p.y = platform.y - pHeight;
+            p.vy = 0;
+            p.onGround = true;
+          }
+        }
+        
+        // Exits logic
+        for (const exit of mapData.exits) {
+          if (p.x + pWidth > exit.x && p.x < exit.x + exit.width && p.y + pHeight > exit.y && p.y < exit.y + exit.height) {
+            if (keys['e']) {
+              const newMap = MAPS[exit.to];
+              setCurrentMap(exit.to);
+              p.x = exit.x < 100 ? 900 : newMap.spawnX;
+              p.y = newMap.spawnY;
+              updatePosition(p.x, p.y, exit.to);
+              keys['e'] = false; // consume key
             }
           }
-          
-          checkExits(x, y, keys);
-          x = Math.max(0, Math.min(x, canvas.width - playerWidth));
-          if (y > canvas.height) { y = 100; vy = 0; }
-          
-          return { x, y, vx, vy, onGround, facing, stepCounter, frame };
-        });
+        }
+
+        p.x = Math.max(0, Math.min(p.x, canvas.width - pWidth));
+        if (p.y > canvas.height) { p.y = 100; p.vy = 0; }
+        
+        // Throttled Network Sync
+        const now = Date.now();
+        const isMoving = Math.abs(p.vx) > 0 || Math.abs(p.vy) > 0;
+        
+        if (isMoving && now - lastWsRef.current > 66) { // ~15 FPS WebSocket
+          sendPosition(p.x, p.y, p.facing, currentMap);
+          lastWsRef.current = now;
+        } else if (!isMoving && now - lastWsRef.current > 500) { // Occasional idle ping
+          sendPosition(p.x, p.y, p.facing, currentMap);
+          lastWsRef.current = now;
+        }
+        
+        if (now - lastSaveRef.current > 3000) { // DB Save every 3s
+          updatePosition(p.x, p.y, currentMap);
+          lastSaveRef.current = now;
+        }
+
+        // Force a UI trigger to make React re-draw the canvas
+        if (frameCount % 2 === 0) setUiTrigger(prev => prev + 1);
       }
       
       animationId = requestAnimationFrame(gameLoop);
@@ -580,16 +615,7 @@ export const Overworld = () => {
     
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [checkEncounter, checkExits, mapData, npcDialog]);
- 
-  // Send position
-  useEffect(() => {
-    const interval = setInterval(() => {
-      sendPosition(playerState.x, playerState.y, playerState.facing, currentMap);
-    }, 50);
-    return () => clearInterval(interval);
-  }, [playerState.x, playerState.y, playerState.facing, sendPosition, currentMap]);
- 
+  }, [mapData, currentMap, npcDialog, showEntityMenu, showInventory, showSkillTree, showGuildMenu, duelSetup, startEncounter, updatePosition, sendPosition]);
   // Handle canvas click
   const handleCanvasClick = async (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -785,9 +811,11 @@ export const Overworld = () => {
       }
     });
     
-    drawPlayer(ctx, playerState.x, playerState.y, playerState.facing, playerState.frame, player?.name || 'Player', true);
+    const p = playerRef.current;
+    drawPlayer(ctx, p.x, p.y, p.facing, p.frame, player?.name || 'Player', true);
     
-  }, [playerState, otherPlayers, player, mapData, currentMap, checkNpcInteraction, drawNPC]);
+  // Use uiTrigger to force canvas updates instead of playerState
+  }, [uiTrigger, otherPlayers, player, mapData, currentMap, checkNpcInteraction, drawNPC]);
  
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>
