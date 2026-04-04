@@ -292,6 +292,16 @@ export const GameProvider = ({ children }) => {
     }
   }, [getAuthHeader, player]);
 
+  const acceptFriend = useCallback(async (requestId) => {
+    try {
+      const { data } = await axios.post(`${API}/friends/accept/${requestId}`, {}, { headers: getAuthHeader() });
+      await fetchFriends();
+      return data;
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail };
+    }
+  }, [getAuthHeader, fetchFriends]);
+
   const acceptDuel = useCallback(async (challengerId, wager) => {
     try {
       // Trigger the backend to deduct gold and notify both players to start
