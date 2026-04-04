@@ -326,7 +326,7 @@ setTimeout(() => advance(newParty, newEnemies, newDefeated, newHp <= 0), 500);  
         <div className="text-amber-400 text-[10px] font-bold mb-1 text-center">TURNS</div>
         <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
           {visibleTL.map((t, i) => {
-            const key = t.isEnemy ? t.encounter_id : (t.type === 'player' ? 'hero' : `ally_${t.id}`);
+            const key = t.unique_id || t.encounter_id;
             return (
               <div key={`${key}-${i}`}
                 className={`w-full h-12 rounded flex items-center justify-center border transition-all
@@ -334,7 +334,7 @@ setTimeout(() => advance(newParty, newEnemies, newDefeated, newHp <= 0), 500);  
                     : t.isEnemy ? 'border-red-500/40 bg-red-900/20'
                     : 'border-cyan-400/40 bg-cyan-900/20'}`}>
                 <div className="w-8 h-8">
-                  {t.isEnemy ? <MonsterSprite type={t.sprite} size={32}/> : <PlayerSprite size={32}/>}
+                  {t.isEnemy ? <MonsterSprite type={t.sprite} size={32}/> : (t.type === 'player' ? <PlayerSprite size={32}/> : <MonsterSprite type={t.sprite} size={32}/>)}
                 </div>
               </div>
             );
