@@ -1210,7 +1210,8 @@ async def combat_victory(request: Request):
                 "gold": updated_player['gold'],
                 "stat_points": updated_player['stat_points'],
             }
-        }        @api_router.post("/combat/save-state")
+        }
+        @api_router.post("/combat/save-state")
 async def save_combat_state(request: Request):
     body = await request.json()
     party_state = body.get('party', [])
