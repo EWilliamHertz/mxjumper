@@ -2,9 +2,15 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 
+import axios from 'axios';
+import { useAuth } from './AuthContext';
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
 const WS_URL = BACKEND_URL ? BACKEND_URL.replace('https://', 'wss://').replace('http://', 'ws://') : '';
+
+// Ensure cookies are sent with every request
+axios.defaults.withCredentials = true;
 
 const GameContext = createContext(null);
 

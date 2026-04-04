@@ -84,35 +84,35 @@ const PublicRoute = ({ children }) => {
 
 function App() {
   return (
-    <div className="App h-[100dvh] w-screen overflow-hidden bg-[#050505]">
-      {/* Scale wrapper to ensure HUD/Chat fits on iPad without scrolling */}
-      <div className="h-full w-full flex flex-col transform scale-[0.95] origin-top">
-        <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route 
-              path="/login" 
-              element={
-                <PublicRoute>
-                  <LoginScreen />
-                </PublicRoute>
-              } 
-            />
-            <Route 
-              path="/game" 
-              element={
-                <ProtectedRoute>
-                  <GameContent />
-                </ProtectedRoute>
-              } 
-            />
-            <Route path="/" element={<Navigate to="/game" replace />} />
-       <Route path="*" element={<Navigate to="/game" replace />} />
-          </Routes>
-        </BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
+        <div className="App h-screen w-screen overflow-hidden bg-[#050505] flex flex-col items-center justify-center">
+          {/* Content Wrapper: Scale down slightly but ensure it fills the viewport */}
+          <div className="w-full h-full transform scale-[0.98] lg:scale-100 transition-transform duration-500">
+            <Routes>
+              <Route 
+                path="/login" 
+                element={
+                  <PublicRoute>
+                    <LoginScreen />
+                  </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/game" 
+                element={
+                  <ProtectedRoute>
+                    <GameContent />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/" element={<Navigate to="/game" replace />} />
+              <Route path="*" element={<Navigate to="/game" replace />} />
+            </Routes>
+          </div>
+        </div>
       </AuthProvider>
-      </div> {/* Closes scale wrapper */}
-    </div>
+    </BrowserRouter>
   );
 }
 
