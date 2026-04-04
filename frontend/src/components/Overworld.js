@@ -340,7 +340,19 @@ export const Overworld = () => {
   
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
- const lastWsRef = useRef(Date.now()); // NEW: Throttles WebSocket messages
+  const lastWsRef = useRef(Date.now()); // NEW: Throttles WebSocket messages
+  
+  // Fix for extreme lag: Refs to hold state without restarting the canvas loop
+  const otherPlayersRef = useRef(otherPlayers);
+  const playerDetailsRef = useRef(player);
+  
+  useEffect(() => { 
+    otherPlayersRef.current = otherPlayers; 
+  }, [otherPlayers]);
+  
+  useEffect(() => { 
+    playerDetailsRef.current = player; 
+  }, [player]);
   // Background Music Mapping
   const MAP_MUSIC = useMemo(() => ({
     forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
@@ -816,21 +828,21 @@ export const Overworld = () => {
       }
 
       // Other players
-      Object.values(otherPlayers).forEach(other => {
+      Object.values(otherPlayersRef.current).forEach(other => {
         if (other.current_map === currentMap) {
           drawPlayer(ctx, other.x, other.y, other.facing || 'right', 0, other.name, false);
         }
       });
 
       // Main player — always read from ref for up-to-date physics position
-      drawPlayer(ctx, p.x, p.y, p.facing, p.frame, player?.name || 'Player', true);
+      drawPlayer(ctx, p.x, p.y, p.facing, p.frame, playerDetailsRef.current?.name || 'Player', true);
 
       animationId = requestAnimationFrame(renderFrame);
     };
 
     animationId = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(animationId);
-  }, [mapData, otherPlayers, player, currentMap, checkNpcInteraction, drawNPC]);
+  }, [mapData, currentMap, checkNpcInteraction, drawNPC]); // Removed otherPlayers and player from dependencies
  
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>
