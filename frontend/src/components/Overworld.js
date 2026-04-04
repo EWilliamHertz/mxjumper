@@ -608,8 +608,7 @@ export const Overworld = () => {
           lastSaveRef.current = now;
         }
 
-        // Force a UI trigger to make React re-draw the canvas
-        if (frameCount % 2 === 0) setUiTrigger(prev => prev + 1);
+
       }
       
       animationId = requestAnimationFrame(gameLoop);
@@ -816,8 +815,8 @@ export const Overworld = () => {
     const p = playerRef.current;
     drawPlayer(ctx, p.x, p.y, p.facing, p.frame, player?.name || 'Player', true);
     
-  // Use uiTrigger to force canvas updates instead of playerState
-  }, [uiTrigger, otherPlayers, player, mapData, currentMap, checkNpcInteraction, drawNPC]);
+  // Canvas re-renders only when actual game state changes (map, players, time)
+  }, [otherPlayers, player, mapData, currentMap, gameTime, checkNpcInteraction, drawNPC]);
  
   const PlayerHUDSprite = () => (
     <svg viewBox="0 0 64 64" width={40} height={40}>
