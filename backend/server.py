@@ -1177,9 +1177,9 @@ async def combat_victory(request: Request):
                 "gold": updated_player['gold'],
                 "stat_points": updated_player['stat_points'],
             }
-        }    
+        }
 
-        @api_router.post("/combat/save-state")
+@api_router.post("/combat/save-state")
 async def save_combat_state(request: Request):
     body = await request.json()
     party_state = body.get('party', [])
@@ -1187,7 +1187,9 @@ async def save_combat_state(request: Request):
     user = await get_current_user(request)
     async with db_pool.acquire() as conn:
         player = await conn.fetchrow('SELECT id FROM players WHERE user_id = $1', user['id'])
-        
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+            
         for member in party_state:
             if member.get('type') == 'player':
                 await conn.execute('UPDATE players SET hp = $1, mp = $2 WHERE id = $3', 
