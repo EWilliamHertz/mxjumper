@@ -22,11 +22,36 @@ const MAPS = {
       { x: 700, y: 480, type: 'bush' },
     ],
     exits: [
+      { x: 0, y: 460, width: 50, height: 60, to: 'slime_forest', label: '← Slime Forest' },
       { x: 950, y: 460, width: 50, height: 60, to: 'cave', label: 'Cave →' },
     ],
     spawnX: 100,
     spawnY: 400,
     noEncounters: true,
+  },
+  slime_forest: {
+    name: 'Slimy Bog (Beginner)',
+    bgGradient: ['#6B8E23', '#556B2F', '#8B7355'],
+    platforms: [
+      { x: 0, y: 520, width: 1000, height: 80, type: 'mud' },
+      { x: 100, y: 450, width: 150, height: 24, type: 'mud' },
+      { x: 300, y: 380, width: 120, height: 24, type: 'mud' },
+      { x: 500, y: 420, width: 150, height: 24, type: 'mud' },
+      { x: 700, y: 360, width: 130, height: 24, type: 'mud' },
+    ],
+    decorations: [
+      { x: 80, y: 480, type: 'bush' },
+      { x: 200, y: 480, type: 'tree' },
+      { x: 400, y: 480, type: 'bush' },
+      { x: 600, y: 480, type: 'bush' },
+      { x: 800, y: 480, type: 'tree' },
+    ],
+    exits: [
+      { x: 950, y: 460, width: 50, height: 60, to: 'forest', label: 'Emerald Forest →' },
+    ],
+    spawnX: 100,
+    spawnY: 400,
+    encounterZone: 'slime',
   },
   wasteland: {
     name: 'The Dead Wasteland',
@@ -78,6 +103,7 @@ const MAPS = {
     exits: [
       { x: 0, y: 460, width: 50, height: 60, to: 'forest', label: '← Forest' },
       { x: 950, y: 460, width: 50, height: 60, to: 'mountain', label: 'Mountain →' },
+      { x: 900, y: 100, width: 60, height: 60, to: 'ancient_ruins', label: 'Ruins ↑' },
     ],
     spawnX: 80,
     spawnY: 400,
@@ -106,6 +132,7 @@ const MAPS = {
       { x: 950, y: 460, width: 50, height: 60, to: 'village', label: 'Village →' },
       { x: 720, y: 120, width: 60, height: 60, to: 'wasteland', label: 'Wasteland ↑' },
       { x: 200, y: 100, width: 60, height: 60, to: 'sky_reach', label: 'Sky Reach ↑' },
+      { x: 950, y: 120, width: 50, height: 60, to: 'volcanic_forge', label: 'Forge ↑' },
     ],
     spawnX: 80,
     spawnY: 400,
@@ -151,6 +178,7 @@ const MAPS = {
     ],
     exits: [
       { x: 80, y: 440, width: 50, height: 60, to: 'mountain', label: '↓ Mountain' },
+      { x: 850, y: 140, width: 60, height: 60, to: 'mystic_grove', label: 'Grove ↑' },
     ],
     spawnX: 80,
     spawnY: 400,
@@ -170,10 +198,96 @@ const MAPS = {
     ],
     exits: [
       { x: 50, y: 500, width: 50, height: 60, to: 'tundra', label: '↑ Tundra' },
+      { x: 950, y: 500, width: 50, height: 60, to: 'abyss', label: 'Abyss →' },
     ],
     spawnX: 100,
     spawnY: 480,
     encounterZone: 'tundra',
+  },
+  abyss: {
+    name: 'The Abyss',
+    bgGradient: ['#000000', '#0a0a1a', '#1a0a2a'],
+    platforms: [
+      { x: 0, y: 560, width: 1000, height: 40, type: 'stone' },
+      { x: 100, y: 450, width: 200, height: 20, type: 'stone' },
+      { x: 400, y: 350, width: 200, height: 20, type: 'stone' },
+      { x: 700, y: 280, width: 180, height: 20, type: 'stone' },
+    ],
+    decorations: [
+      { x: 200, y: 300, type: 'stalactite' },
+      { x: 500, y: 200, type: 'stalactite' },
+      { x: 800, y: 250, type: 'stalactite' },
+    ],
+    exits: [
+      { x: 0, y: 500, width: 50, height: 60, to: 'sunken_citadel', label: '← Sunken Citadel' },
+    ],
+    spawnX: 100,
+    spawnY: 480,
+    encounterZone: 'abyss',
+  },
+  ancient_ruins: {
+    name: 'Ancient Ruins',
+    bgGradient: ['#D2B48C', '#C19A6B', '#A68A64'],
+    platforms: [
+      { x: 0, y: 520, width: 1000, height: 80, type: 'stone' },
+      { x: 150, y: 400, width: 120, height: 24, type: 'stone' },
+      { x: 350, y: 320, width: 140, height: 24, type: 'stone' },
+      { x: 600, y: 380, width: 150, height: 24, type: 'stone' },
+    ],
+    decorations: [
+      { x: 100, y: 480, type: 'stalactite' },
+      { x: 400, y: 380, type: 'stalactite' },
+      { x: 750, y: 480, type: 'stalactite' },
+    ],
+    exits: [
+      { x: 0, y: 460, width: 50, height: 60, to: 'cave', label: '← Cave' },
+    ],
+    spawnX: 100,
+    spawnY: 400,
+    encounterZone: 'ruins',
+  },
+  volcanic_forge: {
+    name: 'Volcanic Forge',
+    bgGradient: ['#8B0000', '#FF4500', '#FFD700'],
+    platforms: [
+      { x: 0, y: 520, width: 1000, height: 80, type: 'stone' },
+      { x: 100, y: 420, width: 150, height: 24, type: 'stone' },
+      { x: 350, y: 340, width: 160, height: 24, type: 'stone' },
+      { x: 600, y: 400, width: 140, height: 24, type: 'stone' },
+    ],
+    decorations: [
+      { x: 150, y: 480, type: 'cloud' },
+      { x: 450, y: 480, type: 'cloud' },
+      { x: 750, y: 480, type: 'cloud' },
+    ],
+    exits: [
+      { x: 0, y: 460, width: 50, height: 60, to: 'village', label: '← Village' },
+    ],
+    spawnX: 100,
+    spawnY: 400,
+    encounterZone: 'volcanic',
+  },
+  mystic_grove: {
+    name: 'Mystic Grove',
+    bgGradient: ['#2d5a27', '#3d6a37', '#4d7a47'],
+    platforms: [
+      { x: 50, y: 520, width: 900, height: 80, type: 'grass' },
+      { x: 150, y: 420, width: 120, height: 24, type: 'grass' },
+      { x: 400, y: 340, width: 140, height: 24, type: 'grass' },
+      { x: 700, y: 380, width: 150, height: 24, type: 'grass' },
+    ],
+    decorations: [
+      { x: 100, y: 480, type: 'tree' },
+      { x: 350, y: 480, type: 'tree' },
+      { x: 600, y: 480, type: 'tree' },
+      { x: 850, y: 480, type: 'tree' },
+    ],
+    exits: [
+      { x: 80, y: 440, width: 50, height: 60, to: 'sky_reach', label: '↓ Sky Reach' },
+    ],
+    spawnX: 100,
+    spawnY: 400,
+    encounterZone: 'forest',
   },
 };
  
@@ -226,14 +340,17 @@ export const Overworld = () => {
   // Background Music Mapping
   const MAP_MUSIC = useMemo(() => ({
     forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    slime_forest: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
     village: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
     cave: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    ancient_ruins: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
     mountain: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    volcanic_forge: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
     wasteland: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
     tundra: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
-    sky_reach: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
     sunken_citadel: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
-    lava_forge: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+    abyss: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+    sky_reach: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
     mystic_grove: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3',
   }), []);
  
