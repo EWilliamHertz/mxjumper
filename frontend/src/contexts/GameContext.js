@@ -180,6 +180,17 @@ export const GameProvider = ({ children }) => {
     }
   }, [fetchParty, getAuthHeader]);
 
+  // Quests
+  const fetchQuests = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/quests`, { headers: getAuthHeader() });
+      setQuests(data);
+      return data;
+    } catch (err) {
+      return { available: [], active: [], completed: [] };
+    }
+  }, [getAuthHeader]);
+
   // Process victory
   const processVictory = useCallback(async (xp, partyState, defeatedMonsters = []) => {
     try {
