@@ -355,28 +355,28 @@ export const Overworld = () => {
     battle: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
   }), []);
  
-  // Handle Music Switching (pause map music during combat)
+  // Handle Music Switching (battle music during combat, auto-resume map music after)
   useEffect(() => {
     const audio = audioRef.current;
     
-    // During combat, pause map music and optionally play battle music
+    // During combat, play battle music
     if (gameState === 'combat') {
-      audio.pause();
-      // Could add battle music here: audio.src = MAP_MUSIC.battle;
+      audio.src = MAP_MUSIC.battle;
+      audio.loop = true;
+      audio.volume = 0.2;
+      audio.play().catch(e => console.log("Audio blocked by browser:", e));
       return;
     }
     
-    // In overworld, play map music
+    // After combat (exiting), resume map music automatically
     audio.src = MAP_MUSIC[currentMap] || MAP_MUSIC.forest;
     audio.loop = true;
-    audio.volume = 0.2; 
-    if (!isMuted) {
-      audio.play().catch(e => console.log("Audio blocked by browser:", e));
-    } else {
-      audio.pause();
-    }
+    audio.volume = 0.2;
+    // Auto-play map music after combat without requiring manual unmute
+    audio.play().catch(e => console.log("Audio blocked by browser:", e));
+    
     return () => audio.pause();
-  }, [currentMap, isMuted, gameState, MAP_MUSIC]);
+  }, [currentMap, gameState, MAP_MUSIC]);
  
   // Day/Night Cycle Timer
   useEffect(() => {
