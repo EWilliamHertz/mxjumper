@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useGame } from '../contexts/GameContext';
+import Equipment from './Equipment';
  
 // Map definitions
 const MAPS = {
@@ -307,7 +308,7 @@ export const Overworld = () => {
     player, otherPlayers, sendPosition, startEncounter, healParty, setGameState, updatePosition, fetchPlayer,
     chatMessages, sendChatMessage, sendMultiplayerRequest, notifications, clearNotification,
     interactNpc, fetchNpcs, npcs, buyFromNpc, quests, fetchQuests, acceptQuest,
-    spendSkillPoint, gameState
+    spendSkillPoint, gameState, equipment, inventory, equipItem, unequipItem
   } = useGame();
   
   const [currentMap, setCurrentMap] = useState(player?.current_map || 'forest');
@@ -332,7 +333,8 @@ export const Overworld = () => {
   const [showInventory, setShowInventory] = useState(false);
   const [showSkillTree, setShowSkillTree] = useState(false); 
   const [showGuildMenu, setShowGuildMenu] = useState(false); 
-  const [duelSetup, setDuelSetup] = useState(null); 
+  const [duelSetup, setDuelSetup] = useState(null);
+  const [showEquipmentMenu, setShowEquipmentMenu] = useState(false); 
   
   const keysRef = useRef({});
   const lastSaveRef = useRef(Date.now());
@@ -851,6 +853,14 @@ export const Overworld = () => {
               </div>
             </div>
           </div>
+          
+          {/* Equipment Button */}
+          <button
+            onClick={() => setShowEquipmentMenu(true)}
+            className="w-full mt-3 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded uppercase text-xs tracking-widest transition"
+          >
+            ⚔️ Equipment
+          </button>
         </div>
       </div>
  
@@ -1008,6 +1018,31 @@ export const Overworld = () => {
               </div>
            </div>
            <button onClick={() => setShowGuildMenu(false)} className="mt-4 bg-slate-800 text-white font-bold py-2 rounded-lg hover:bg-slate-700 border border-slate-600 uppercase tracking-widest text-xs">Close Registry (G)</button>
+        </div>
+      )}
+
+      {/* Equipment Menu Modal */}
+      {showEquipmentMenu && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-gray-900 rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto w-full max-w-5xl">
+            <div className="sticky top-0 bg-gray-800 p-4 border-b border-slate-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">Equipment & Gear</h2>
+              <button
+                onClick={() => setShowEquipmentMenu(false)}
+                className="text-gray-400 hover:text-white text-2xl font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6">
+              <Equipment 
+                equipment={equipment || {}} 
+                inventory={inventory || []}
+                onEquip={equipItem}
+                onUnequip={unequipItem}
+              />
+            </div>
+          </div>
         </div>
       )}
  

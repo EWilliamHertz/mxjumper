@@ -30,6 +30,15 @@ export const GameProvider = ({ children }) => {
   const [npcs, setNpcs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [bestiary, setBestiary] = useState({ monsters: [], total: 0, discovered: 0, captured_count: 0 });
+  const [equipment, setEquipment] = useState({
+    head: null,
+    chest: null,
+    legs: null,
+    feet: null,
+    hands: null,
+    back: null
+  });
+  const [inventory, setInventory] = useState([]);
   
   const wsRef = useRef(null);
 
@@ -450,6 +459,39 @@ export const GameProvider = ({ children }) => {
     setNotifications(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  // Equipment Management
+  const equipItem = useCallback(async (itemId, slot) => {
+    try {
+      const { data } = await axios.post(`${API}/player/equip`, 
+        { item_id: itemId, slot }, 
+        { headers: getAuthHeader() }
+      );
+      setEquipment(data.equipment);
+      setPlayer(prev => ({ ...prev, stats: data.stats }));
+      setNotifications(prev => [...prev, { type: 'success', message: 'Item equipped!' }]);
+    } catch (err) {
+      setNotifications(prev => [...prev, { type: 'error', message: 'Failed to equip item' }]);
+    }
+  }, [getAuthHeader]);
+
+  const unequipItem = useCallback(async (slot) => {
+    try {
+      const { data } = await axios.post(`${API}/player/unequip`, 
+        { slot }, 
+        { headers: getAuthHeader() }
+      );
+      setEquipment(data.equipment);
+      setPlayer(prev => ({ ...prev, stats: data.stats }));
+      setNotifications(prev => [...prev, { type: 'success', message: 'Item unequipped!' }]);
+    } catch (err) {
+      setNotifications(prev => [...prev, { type: 'error', message: 'Failed to unequip item' }]);
+    }
+  }, [getAuthHeader]);
+
+  const addItemToInventory = useCallback((item) => {
+    setInventory(prev => [...prev, item]);
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     if (user) {
@@ -464,7 +506,7 @@ export const GameProvider = ({ children }) => {
 
   return (
     <GameContext.Provider value={{
-      player, playerLoading, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications, bestiary,
+      player, playerLoading, party, allies, abilities, otherPlayers, gameState, combatData, chatMessages, friends, quests, npcs, notifications, bestiary, equipment, inventory,
       setGameState, setCombatData,
       fetchPlayer, createPlayer, fetchParty, fetchAllies, fetchAbilities,
       toggleParty, allocateStats, unlockAbility,
@@ -475,7 +517,8 @@ export const GameProvider = ({ children }) => {
       fetchNpcs, interactNpc, buyFromNpc,
       fetchQuests, acceptQuest, completeQuest,
       fetchBestiary,
-      sendMultiplayerRequest, clearNotification
+      sendMultiplayerRequest, clearNotification,
+      equipItem, unequipItem, addItemToInventory
     }}>
       {children}
     </GameContext.Provider>
